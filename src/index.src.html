@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#FFF8EC">
-<title>אותיות A–H</title>
+<title>אותיות באנגלית</title>
 <style>
 @font-face{font-family:'Andika';font-style:normal;font-weight:700;src:url(data:font/woff2;base64,/*FONT_B64*/) format('woff2');}
 :root{
@@ -138,6 +138,31 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .tile{width:62px;height:62px;border-radius:16px;border:0;background:var(--blue);color:#fff;font-size:40px;box-shadow:0 4px 0 var(--blue-dark);padding:0}
 .tile:active{transform:translateY(3px);box-shadow:0 1px 0 var(--blue-dark)}
 .tile.used{visibility:hidden}
+
+/* levels + resume */
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}
+.levels button{border:0;border-radius:14px;padding:8px 6px;background:var(--card);box-shadow:0 3px 0 var(--line);font-weight:800;font-size:16px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.levels button small{font-size:15px;color:var(--muted)}
+.levels button em{font-style:normal;font-size:12px;color:var(--muted);font-weight:700}
+.levels button.on{background:var(--orange);color:#fff;box-shadow:0 3px 0 var(--orange-dark)}
+.levels button.on small,.levels button.on em{color:#fff}
+.resume{display:flex;align-items:center;gap:12px;width:100%;border:0;border-radius:var(--radius);padding:12px 14px;margin:0 0 14px;background:var(--green);color:#fff;box-shadow:0 4px 0 var(--green-dark);text-align:right}
+.resume .ic{font-size:30px}
+.resume b{display:block;font-size:18px}
+.resume span{display:block;font-size:14px;opacity:.92}
+.level-letters{text-align:center;font-size:24px;letter-spacing:4px;color:var(--blue);margin:-2px 0 14px}
+.stage .got .ok{display:block;color:var(--green);font-size:18px;text-align:center}
+.choices.four{grid-template-columns:repeat(2,1fr)}
+.choices.four .choice{aspect-ratio:auto;height:104px}
+.memory.many .mcard{aspect-ratio:4/5;font-size:36px}
+.mirror-hint{display:block}
+.mirror-hint .letters{font-size:40px;line-height:1;direction:ltr;text-align:center;margin-bottom:6px;letter-spacing:10px}
+.mirror-hint .letters span:nth-child(1){color:var(--blue)}
+.mirror-hint .letters span:nth-child(2){color:var(--orange)}
+.mirror-hint .letters span:nth-child(3){color:var(--green)}
+.mirror-hint .letters span:nth-child(4){color:#9B51E0}
+.mirror-hint p{margin:0;font-size:15px;line-height:1.55}
+.reset-btn{margin-top:8px;border:0;background:none;color:var(--red);font-weight:800;text-decoration:underline;padding:4px 0}
 </style>
 </head>
 <body>
@@ -154,39 +179,121 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 <script>
 'use strict';
 /* =========================================================
-   Data
+   Data: letters (lvl = game level), levels, words
    ========================================================= */
 const LETTERS = [
-  { L:'A', snd:'אַ (פה פתוח)', kws:[{w:'apple',e:'🍎',he:'תפוח'},{w:'ant',e:'🐜',he:'נמלה'}] },
-  { L:'B', snd:'בּ',            kws:[{w:'ball',e:'⚽',he:'כדור'},{w:'bus',e:'🚌',he:'אוטובוס'}] },
-  { L:'C', snd:'ק',             kws:[{w:'cat',e:'🐱',he:'חתול'},{w:'car',e:'🚗',he:'מכונית'}] },
-  { L:'D', snd:'ד',             kws:[{w:'dog',e:'🐶',he:'כלב'},{w:'duck',e:'🦆',he:'ברווז'}] },
-  { L:'E', snd:'אֶ',            kws:[{w:'egg',e:'🥚',he:'ביצה'},{w:'elephant',e:'🐘',he:'פיל'}] },
-  { L:'F', snd:'פ',             kws:[{w:'fish',e:'🐟',he:'דג'},{w:'frog',e:'🐸',he:'צפרדע'}] },
-  { L:'G', snd:'ג',             kws:[{w:'goat',e:'🐐',he:'עז'},{w:'gift',e:'🎁',he:'מתנה'}] },
-  { L:'H', snd:'ה',             kws:[{w:'hat',e:'🎩',he:'כובע'},{w:'house',e:'🏠',he:'בית'}] },
+  { L:'A', lvl:1, snd:'אַ (פה פתוח)', kws:[{w:'apple',e:'🍎',he:'תפוח'},{w:'ant',e:'🐜',he:'נמלה'}] },
+  { L:'B', lvl:1, snd:'בּ', kws:[{w:'ball',e:'⚽',he:'כדור'},{w:'bus',e:'🚌',he:'אוטובוס'}] },
+  { L:'C', lvl:1, snd:'ק', kws:[{w:'cat',e:'🐱',he:'חתול'},{w:'car',e:'🚗',he:'מכונית'}] },
+  { L:'D', lvl:1, snd:'ד', kws:[{w:'dog',e:'🐶',he:'כלב'},{w:'duck',e:'🦆',he:'ברווז'}] },
+  { L:'E', lvl:1, snd:'אֶ', kws:[{w:'egg',e:'🥚',he:'ביצה'},{w:'elephant',e:'🐘',he:'פיל'}] },
+  { L:'F', lvl:1, snd:'פ', kws:[{w:'fish',e:'🐟',he:'דג'},{w:'frog',e:'🐸',he:'צפרדע'}] },
+  { L:'G', lvl:1, snd:'ג', kws:[{w:'goat',e:'🐐',he:'עז'},{w:'gift',e:'🎁',he:'מתנה'}] },
+  { L:'H', lvl:1, snd:'ה', kws:[{w:'hat',e:'🎩',he:'כובע'},{w:'house',e:'🏠',he:'בית'}] },
+  { L:'I', lvl:2, snd:'אִ (קצר)', kws:[{w:'insect',e:'🐛',he:'חרק'},{w:'ink',e:'🖋️',he:'דיו'}] },
+  { L:'J', lvl:2, snd:'ג׳', kws:[{w:'juice',e:'🧃',he:'מיץ'},{w:'jeans',e:'👖',he:'ג׳ינס'}] },
+  { L:'K', lvl:2, snd:'ק', kws:[{w:'kite',e:'🪁',he:'עפיפון'},{w:'key',e:'🔑',he:'מפתח'}] },
+  { L:'L', lvl:2, snd:'ל', kws:[{w:'lion',e:'🦁',he:'אריה'},{w:'leaf',e:'🍃',he:'עלה'}] },
+  { L:'M', lvl:2, snd:'מ', kws:[{w:'moon',e:'🌙',he:'ירח'},{w:'monkey',e:'🐒',he:'קוף'}] },
+  { L:'N', lvl:2, snd:'נ', kws:[{w:'nose',e:'👃',he:'אף'},{w:'nut',e:'🥜',he:'אגוז'}] },
+  { L:'O', lvl:2, snd:'אוֹ', kws:[{w:'octopus',e:'🐙',he:'תמנון'},{w:'orange',e:'🍊',he:'תפוז'}] },
+  { L:'P', lvl:2, snd:'פּ', kws:[{w:'pig',e:'🐷',he:'חזיר'},{w:'pizza',e:'🍕',he:'פיצה'}] },
+  { L:'Q', lvl:3, snd:'קוו', kws:[{w:'queen',e:'👸',he:'מלכה'},{w:'question',e:'❓',he:'שאלה'}] },
+  { L:'R', lvl:3, snd:'ר', kws:[{w:'rabbit',e:'🐰',he:'ארנב'},{w:'rain',e:'🌧️',he:'גשם'}] },
+  { L:'S', lvl:3, snd:'ס', kws:[{w:'sun',e:'☀️',he:'שמש'},{w:'snake',e:'🐍',he:'נחש'}] },
+  { L:'T', lvl:3, snd:'ט', kws:[{w:'tiger',e:'🐯',he:'נמר'},{w:'tree',e:'🌳',he:'עץ'}] },
+  { L:'U', lvl:3, snd:'אַ (קצר)', kws:[{w:'umbrella',e:'☂️',he:'מטרייה'},{w:'up',e:'⬆️',he:'למעלה'}] },
+  { L:'V', lvl:3, snd:'ו', kws:[{w:'van',e:'🚐',he:'טנדר'},{w:'violin',e:'🎻',he:'כינור'}] },
+  { L:'W', lvl:3, snd:'וּ (שפתיים עגולות)', kws:[{w:'watch',e:'⌚',he:'שעון'},{w:'whale',e:'🐋',he:'לווייתן'}] },
+  { L:'X', lvl:3, snd:'קס', kws:[{w:'fox',e:'🦊',he:'שועל',end:true},{w:'box',e:'📦',he:'קופסה',end:true}] },
+  { L:'Y', lvl:3, snd:'י', kws:[{w:'yoyo',e:'🪀',he:'יו־יו'},{w:'yellow',e:'💛',he:'צהוב'}] },
+  { L:'Z', lvl:3, snd:'ז', kws:[{w:'zebra',e:'🦓',he:'זברה'},{w:'zero',e:'0️⃣',he:'אפס'}] },
 ];
-const ABC = LETTERS.map(x => x.L);
+const LEVELS = [
+  { n: 1, letters: 'ABCDEFGH',   mirror: ['b', 'd'] },
+  { n: 2, letters: 'IJKLMNOP',   mirror: ['b', 'd', 'p'] },
+  { n: 3, letters: 'QRSTUVWXYZ', mirror: ['b', 'd', 'p', 'q'] },
+];
+const rangeOf = lv => `${lv.letters[0]}–${lv.letters[lv.letters.length - 1]}`;
 
-// Words made only from A–H. tip: alternating [hebrew, english, hebrew, ...]
+// Words per game level (L), only from letters learned up to that level. d = difficulty inside the level.
+// tip: alternating [hebrew, english, hebrew, ...]
+const T_EE = ['שתי האותיות ', 'ee', ' ביחד נשמעות כמו אִי'];
+const T_OO = ['שתי האותיות ', 'oo', ' ביחד נשמעות כמו אוּ'];
+const T_CK = ['האותיות ', 'ck', ' ביחד נשמעות כמו ק'];
+const T_SILENT_E = ['האות ', 'e', ' בסוף שקטה: כותבים אותה אבל לא שומעים אותה'];
 const WORDS = [
-  { w: 'bed',   he: 'מיטה',    e: '🛏️', lvl: 1 },
-  { w: 'bag',   he: 'תיק',     e: '🎒', lvl: 1 },
-  { w: 'dad',   he: 'אבא',     e: '👨', lvl: 1 },
-  { w: 'cab',   he: 'מונית',   e: '🚕', lvl: 1 },
-  { w: 'bad',   he: 'רע',      e: '👎', lvl: 1 },
-  { w: 'bee',   he: 'דבורה',   e: '🐝', lvl: 2, tip: ['שתי האותיות ', 'ee', ' ביחד נשמעות כמו אִי'] },
-  { w: 'egg',   he: 'ביצה',    e: '🥚', lvl: 2, tip: ['שתי אותיות ', 'g', ' אבל שומעים צליל אחד'] },
-  { w: 'head',  he: 'ראש',     e: '🗣️', lvl: 2, tip: ['במילה הזו ', 'ea', ' ביחד נשמעות כמו אֶ'] },
-  { w: 'feed',  he: 'להאכיל',  e: '🍼', lvl: 2, tip: ['שתי האותיות ', 'ee', ' ביחד נשמעות כמו אִי'] },
-  { w: 'face',  he: 'פנים',    e: '😀', lvl: 3, tip: ['האות ', 'e', ' בסוף שקטה: כותבים אותה אבל לא שומעים אותה'] },
-  { w: 'cafe',  he: 'בית קפה', e: '☕', lvl: 3 },
-  { w: 'beach', he: 'חוף ים',  e: '🏖️', lvl: 3, tip: ['האותיות ', 'ea', ' נשמעות כמו אִי, והאותיות ', 'ch', ' נשמעות כמו צ׳'] },
+  // level 1: A–H
+  { L:1, d:1, w:'bed',   he:'מיטה',    e:'🛏️' },
+  { L:1, d:1, w:'bag',   he:'תיק',     e:'🎒' },
+  { L:1, d:1, w:'dad',   he:'אבא',     e:'👨' },
+  { L:1, d:1, w:'cab',   he:'מונית',   e:'🚕' },
+  { L:1, d:1, w:'bad',   he:'רע',      e:'👎' },
+  { L:1, d:2, w:'bee',   he:'דבורה',   e:'🐝', tip: T_EE },
+  { L:1, d:2, w:'egg',   he:'ביצה',    e:'🥚', tip: ['שתי אותיות ', 'g', ' אבל שומעים צליל אחד'] },
+  { L:1, d:2, w:'head',  he:'ראש',     e:'🗣️', tip: ['במילה הזו ', 'ea', ' ביחד נשמעות כמו אֶ'] },
+  { L:1, d:2, w:'feed',  he:'להאכיל',  e:'🍼', tip: T_EE },
+  { L:1, d:3, w:'face',  he:'פנים',    e:'😀', tip: T_SILENT_E },
+  { L:1, d:3, w:'cafe',  he:'בית קפה', e:'☕' },
+  { L:1, d:3, w:'beach', he:'חוף ים',  e:'🏖️', tip: ['האותיות ', 'ea', ' נשמעות כמו אִי, והאותיות ', 'ch', ' נשמעות כמו צ׳'] },
+  // level 2: A–P
+  { L:2, d:1, w:'pig',   he:'חזיר',    e:'🐷' },
+  { L:2, d:1, w:'pen',   he:'עט',      e:'🖊️' },
+  { L:2, d:1, w:'map',   he:'מפה',     e:'🗺️' },
+  { L:2, d:1, w:'leg',   he:'רגל',     e:'🦵' },
+  { L:2, d:1, w:'hen',   he:'תרנגולת', e:'🐔' },
+  { L:2, d:1, w:'jam',   he:'ריבה',    e:'🍯' },
+  { L:2, d:2, w:'milk',  he:'חלב',     e:'🥛' },
+  { L:2, d:2, w:'lamp',  he:'מנורה',   e:'💡' },
+  { L:2, d:2, w:'king',  he:'מלך',     e:'🤴', tip: ['האותיות ', 'ng', ' ביחד נשמעות כמו נג (באף)'] },
+  { L:2, d:2, w:'hand',  he:'יד',      e:'✋' },
+  { L:2, d:2, w:'lion',  he:'אריה',    e:'🦁' },
+  { L:2, d:2, w:'moon',  he:'ירח',     e:'🌙', tip: T_OO },
+  { L:2, d:2, w:'book',  he:'ספר',     e:'📖', tip: T_OO },
+  { L:2, d:3, w:'apple', he:'תפוח',    e:'🍎', tip: ['שתי אותיות ', 'p', ' אבל שומעים צליל אחד'] },
+  { L:2, d:3, w:'panda', he:'פנדה',    e:'🐼' },
+  { L:2, d:3, w:'lemon', he:'לימון',   e:'🍋' },
+  { L:2, d:3, w:'cake',  he:'עוגה',    e:'🎂', tip: T_SILENT_E },
+  { L:2, d:3, w:'bike',  he:'אופניים', e:'🚲', tip: T_SILENT_E },
+  // level 3: A–Z
+  { L:3, d:1, w:'sun',   he:'שמש',     e:'☀️' },
+  { L:3, d:1, w:'bus',   he:'אוטובוס', e:'🚌' },
+  { L:3, d:1, w:'fox',   he:'שועל',    e:'🦊', tip: ['האות ', 'x', ' נשמעת כמו קס'] },
+  { L:3, d:1, w:'box',   he:'קופסה',   e:'📦', tip: ['האות ', 'x', ' נשמעת כמו קס'] },
+  { L:3, d:1, w:'red',   he:'אדום',    e:'🔴' },
+  { L:3, d:1, w:'six',   he:'שש',      e:'6️⃣' },
+  { L:3, d:1, w:'ten',   he:'עשר',     e:'🔟' },
+  { L:3, d:1, w:'web',   he:'רשת',     e:'🕸️' },
+  { L:3, d:2, w:'star',  he:'כוכב',    e:'⭐' },
+  { L:3, d:2, w:'tree',  he:'עץ',      e:'🌳', tip: T_EE },
+  { L:3, d:2, w:'frog',  he:'צפרדע',   e:'🐸' },
+  { L:3, d:2, w:'duck',  he:'ברווז',   e:'🦆', tip: T_CK },
+  { L:3, d:2, w:'sock',  he:'גרב',     e:'🧦', tip: T_CK },
+  { L:3, d:2, w:'rain',  he:'גשם',     e:'🌧️', tip: ['האותיות ', 'ai', ' ביחד נשמעות כמו אֵיי'] },
+  { L:3, d:2, w:'wolf',  he:'זאב',     e:'🐺' },
+  { L:3, d:2, w:'zoo',   he:'גן חיות', e:'🦒', tip: T_OO },
+  { L:3, d:3, w:'queen', he:'מלכה',    e:'👸', tip: ['האותיות ', 'qu', ' נשמעות כמו קוו, והאותיות ', 'ee', ' כמו אִי'] },
+  { L:3, d:3, w:'zebra', he:'זברה',    e:'🦓' },
+  { L:3, d:3, w:'water', he:'מים',     e:'💧' },
+  { L:3, d:3, w:'tiger', he:'נמר',     e:'🐯' },
+  { L:3, d:3, w:'snake', he:'נחש',     e:'🐍', tip: T_SILENT_E },
+  { L:3, d:3, w:'turtle',he:'צב',      e:'🐢' },
+  { L:3, d:3, w:'yellow',he:'צהוב',    e:'💛', tip: ['שתי אותיות ', 'l', ' אבל שומעים צליל אחד'] },
 ];
-const wordsByLevel = lvl => WORDS.filter(w => w.lvl === lvl);
-function sessionWords() {
-  return [...shuffle(wordsByLevel(1)).slice(0, 4), ...shuffle(wordsByLevel(2)).slice(0, 3), ...shuffle(wordsByLevel(3)).slice(0, 1)];
-}
+
+// mirror letters challenge (inside stage 2)
+const MIRROR_WORDS = {
+  b: [{ w:'bed', e:'🛏️', he:'מיטה' }, { w:'bag', e:'🎒', he:'תיק' }, { w:'bus', e:'🚌', he:'אוטובוס' }, { w:'bee', e:'🐝', he:'דבורה' }, { w:'ball', e:'⚽', he:'כדור' }, { w:'banana', e:'🍌', he:'בננה' }],
+  d: [{ w:'dog', e:'🐶', he:'כלב' }, { w:'duck', e:'🦆', he:'ברווז' }, { w:'door', e:'🚪', he:'דלת' }, { w:'dad', e:'👨', he:'אבא' }, { w:'dolphin', e:'🐬', he:'דולפין' }, { w:'drum', e:'🥁', he:'תוף' }],
+  p: [{ w:'pig', e:'🐷', he:'חזיר' }, { w:'pen', e:'🖊️', he:'עט' }, { w:'pizza', e:'🍕', he:'פיצה' }, { w:'panda', e:'🐼', he:'פנדה' }, { w:'penguin', e:'🐧', he:'פינגווין' }],
+  q: [{ w:'queen', e:'👸', he:'מלכה' }, { w:'question', e:'❓', he:'שאלה' }, { w:'quiet', e:'🤫', he:'שקט' }],
+};
+const MIRROR_RULE = {
+  b: 'קודם קו למעלה, אחר כך בטן.',
+  d: 'קודם בטן, אחר כך קו למעלה.',
+  p: 'קודם קו למטה, אחר כך בטן.',
+  q: 'קודם בטן, אחר כך קו למטה.',
+};
 
 /* =========================================================
    Helpers
@@ -207,24 +314,48 @@ function h(tag, attrs, ...kids) {
 const en = (text, cls = '') => h('span', { class: ('en ' + cls).trim() }, text);
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const pick = a => a[Math.floor(Math.random() * a.length)];
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem('abcAH_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('abcAH_' + k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem('abcAH_' + k); } catch (e) {} },
 };
 
 const state = {
   stars: store.get('stars', 0),
   stageStars: store.get('stageStars', {}),
-  caseMode: store.get('case', 'upper'),   // 'upper' | 'lower'
+  done: store.get('done', {}),
+  caseMode: store.get('case', 'upper'),
+  level: store.get('level', 1),
   startedAt: null,
   breakShown: false,
 };
 const fmt = s => state.caseMode === 'upper' ? s.toUpperCase() : s.toLowerCase();
+const curLevel = () => LEVELS[state.level - 1];
+const newLetters = () => LETTERS.filter(x => x.lvl === state.level);
+const knownABC = () => LETTERS.filter(x => x.lvl <= state.level).map(x => x.L);
+const findLetter = L => LETTERS.find(x => x.L === L.toUpperCase());
+const levelWords = d => WORDS.filter(w => w.L === state.level && (d == null || w.d === d));
+const findWord = s => WORDS.find(w => w.w === s && w.L === state.level) || WORDS.find(w => w.w === s);
+function sessionWords() {
+  return [...shuffle(levelWords(1)).slice(0, 4), ...shuffle(levelWords(2)).slice(0, 3), ...shuffle(levelWords(3)).slice(0, 1)];
+}
+const lk = key => `${state.level}:${key}`;
+function stageStarsFor(level, key) {
+  return state.stageStars[`${level}:${key}`] || (level === 1 ? state.stageStars[key] || 0 : 0);
+}
 
 /* =========================================================
-   Speech (Web Speech API: works offline on most phones)
+   Resume: remembers the exact screen, so the child can continue
+   ========================================================= */
+const Resume = {
+  save(stage, data) { store.set('resume', { level: state.level, caseMode: state.caseMode, stage, data, at: Date.now() }); },
+  clear() { store.del('resume'); },
+  get() { return store.get('resume', null); },
+};
+
+/* =========================================================
+   Speech (Web Speech API)
    ========================================================= */
 const Speech = {
   ok: 'speechSynthesis' in window,
@@ -260,7 +391,6 @@ const Speech = {
     });
   },
   en(text, rate) { return this.say(text, 'en-US', rate); },
-  he(text) { return this.voiceFor('he-IL') ? this.say(text, 'he-IL', 1) : Promise.resolve(); },
 };
 Speech.init();
 
@@ -298,7 +428,7 @@ function enter(el) { if (G && el) G.from(el, { y: 14, opacity: 0, duration: .35,
 function renderStars() { $('#starCount').textContent = state.stars; }
 function addStar(stageKey, n = 1) {
   state.stars += n;
-  state.stageStars[stageKey] = (state.stageStars[stageKey] || 0) + n;
+  state.stageStars[lk(stageKey)] = (state.stageStars[lk(stageKey)] || 0) + n;
   store.set('stars', state.stars); store.set('stageStars', state.stageStars);
   renderStars(); pop($('#stars'));
 }
@@ -336,24 +466,36 @@ function progressDots(total, current) {
   return h('div', { class: 'progress', 'aria-label': `סבב ${current + 1} מתוך ${total}` },
     Array.from({ length: total }, (_, i) => h('i', { class: i < current ? 'done' : i === current ? 'now' : '' })));
 }
-
 function speakerPic(emoji, onSay) {
   const b = h('button', { class: 'pic', type: 'button', 'aria-label': 'השמע שוב' },
     h('span', { class: 'emoji' }, emoji), h('span', { class: 'say' }, '🔊 להקשיב שוב'));
   b.addEventListener('click', () => { pop(b); onSay(); });
   return b;
 }
+function nextButton(isLast, onNext, label = 'הבא ←') {
+  return h('button', { class: 'btn green wide hidden', onclick: onNext }, isLast ? 'סיום 🏁' : label);
+}
+// slot size that fits long words on narrow phones
+function slotSizeFor(n) {
+  const avail = Math.min(488, ($('main').clientWidth || 358) - 32);
+  return Math.max(38, Math.min(60, Math.floor((avail - (n - 1) * 8) / n)));
+}
+function sizeSlot(el, s) { el.style.width = s + 'px'; el.style.height = Math.round(s * 1.16) + 'px'; el.style.fontSize = Math.round(s * .72) + 'px'; }
 
 function EndScreen(stageKey, earned, again, nextIdx) {
+  state.done[lk(stageKey)] = true; store.set('done', state.done);
+  Resume.clear();
   const app = screen('כל הכבוד!');
-  const next = STAGES[nextIdx];
+  const next = nextIdx != null ? STAGES[nextIdx] : null;
+  const nextLevel = !next && state.level < LEVELS.length ? LEVELS[state.level] : null;
   const box = h('div', { class: 'end' },
     h('div', { class: 'big' }, '🏆'),
     h('h2', null, 'סיימת את הסבב!'),
     h('p', { class: 'sub' }, `קיבלת ${earned} כוכבים ⭐ (סך הכול ${state.stars})`),
     h('div', { class: 'row' },
-      h('button', { class: 'btn orange', onclick: again }, '🔁 עוד סבב'),
-      next ? h('button', { class: 'btn', onclick: () => next.run() }, `לשלב הבא: ${next.name} ←`) : null),
+      h('button', { class: 'btn orange', onclick: () => again() }, '🔁 עוד סבב'),
+      next ? h('button', { class: 'btn', onclick: () => next.run() }, `לשלב הבא: ${next.name} ←`) : null,
+      nextLevel ? h('button', { class: 'btn', onclick: () => { setLevel(nextLevel.n); } }, `לרמה ${nextLevel.n}: `, en(rangeOf(nextLevel)), ' ←') : null),
     h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => Home() }, 'לתפריט')));
   app.append(box);
   burst($('.big', box), 24);
@@ -365,74 +507,120 @@ function EndScreen(stageKey, earned, again, nextIdx) {
    Home
    ========================================================= */
 const STAGES = [];
+const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה' };
+const RESUME_RUN = {
+  listen: d => StageListen(d), pairs: d => StagePairs(d), mirror: d => MirrorChallenge(d.earned, d),
+  build: d => StageBuild(d), missing: d => StageMissing(d), 'write-letters': d => WriteLetters(d), 'write-words': d => WriteWords(d),
+};
 function Home() {
   const app = screen('אותיות באנגלית', false);
+  const lv = curLevel();
   const hello = h('div', { class: 'home-hello' },
     h('h1', null, 'שלום! 👋'),
-    h('p', { class: 'sub' }, 'מתרגלים את האותיות ', en('A B C D E F G H'), ' דרך משחק. כדאי לשחק לפי הסדר.'));
+    h('p', { class: 'sub' }, 'בחר רמה ושלב. כדאי לשחק לפי הסדר.'));
+
+  const levels = h('div', { class: 'levels', role: 'group', 'aria-label': 'רמה' }, LEVELS.map(l => {
+    const doneCount = STAGES.filter(s => state.done[`${l.n}:${s.key}`]).length;
+    return h('button', { class: l.n === state.level ? 'on' : '', onclick: () => setLevel(l.n) },
+      `רמה ${l.n}`, h('small', null, en(rangeOf(l))), h('em', null, doneCount ? `✅ ${doneCount}/${STAGES.length}` : ' '));
+  }));
+
+  const r = Resume.get();
+  const resumeBtn = r && RESUME_RUN[r.stage] ? h('button', { class: 'resume', onclick: () => {
+    markStarted();
+    state.level = r.level; store.set('level', r.level);
+    if (r.caseMode) { state.caseMode = r.caseMode; store.set('case', r.caseMode); }
+    RESUME_RUN[r.stage](r.data);
+  } },
+    h('span', { class: 'ic' }, '▶️'),
+    h('span', null, h('b', null, 'להמשיך מאיפה שעצרת'),
+      h('span', null, `רמה ${r.level} · ${RESUME_NAMES[r.stage]}` + (r.data && r.data.round != null ? ` · סבב ${r.data.round + 1}` : '')))) : null;
+
   const toggle = h('div', { class: 'case-toggle', role: 'group', 'aria-label': 'סוג אותיות' },
     h('button', { class: state.caseMode === 'upper' ? 'on' : '', onclick: () => setCase('upper') }, 'אותיות גדולות ', en('ABC')),
     h('button', { class: state.caseMode === 'lower' ? 'on' : '', onclick: () => setCase('lower') }, 'אותיות קטנות ', en('abc')));
-  const list = h('div', { class: 'stage-list' }, STAGES.map((s, i) =>
-    h('button', { class: 'stage', onclick: () => { markStarted(); s.run(); } },
+
+  const letters = h('div', { class: 'level-letters en' }, lv.letters.split('').join(' '));
+
+  const list = h('div', { class: 'stage-list' }, STAGES.map((s, i) => {
+    const got = stageStarsFor(state.level, s.key);
+    const isDone = !!state.done[lk(s.key)];
+    return h('button', { class: 'stage', onclick: () => { markStarted(); s.run(); } },
       h('span', { class: 'num' }, s.icon),
       h('span', { class: 'txt' }, h('b', null, `${i + 1}. ${s.name}`), h('span', null, s.desc)),
-      h('span', { class: 'got' }, '⭐ ' + (state.stageStars[s.key] || 0)))));
+      h('span', { class: 'got' }, isDone ? h('span', { class: 'ok' }, '✅') : null, '⭐ ' + got));
+  }));
+
   const parents = h('details', { class: 'parents' },
     h('summary', null, 'להורים'),
     h('p', null, 'סבב קצר של 5–7 דקות ביום עדיף על שעה אחת בשבוע. טעות לא "עולה" כלום, רק מנסים שוב.'),
+    h('p', null, 'רמה 1: ', en('A–H'), '. רמה 2: ', en('I–P'), '. רמה 3: ', en('Q–Z'), '. המילים בכל רמה בנויות רק מאותיות שכבר נלמדו.'),
+    h('p', null, 'ההתקדמות נשמרת בטלפון הזה ובדפדפן הזה. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך מאיפה שעצרת" מחזיר בדיוק לאותו מקום.'),
     h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
-    h('p', null, 'הכפתור "אותיות גדולות / קטנות" קובע איך יוצגו המילים בשלבים 3–5.'));
-  app.append(hello, toggle, list, parents);
+    h('button', { class: 'reset-btn', onclick: resetAll }, 'איפוס כל ההתקדמות'));
+
+  app.append(hello, levels, ...(resumeBtn ? [resumeBtn] : []), toggle, letters, list, parents);
   enter(list);
 }
 function setCase(m) { state.caseMode = m; store.set('case', m); Home(); }
+function setLevel(n) { state.level = n; store.set('level', n); Home(); }
+function resetAll() {
+  if (!confirm('למחוק את כל הכוכבים וההתקדמות?')) return;
+  for (const k of ['stars', 'stageStars', 'done', 'resume', 'level']) store.del(k);
+  state.stars = 0; state.stageStars = {}; state.done = {}; state.level = 1;
+  renderStars(); Home();
+}
 
 /* =========================================================
-   Stage 1: מה שמעת? (first sound -> letter)
+   Stage 1: מה שמעת? (first/last sound -> letter)
    ========================================================= */
-function StageListen() {
-  const ROUNDS = 10;
-  // every letter once, plus two repeats; first half upper case, second half lower case
-  const order = shuffle(LETTERS).concat(shuffle(LETTERS).slice(0, 2));
-  let round = 0, earned = 0;
+function StageListen(res) {
+  const pool = newLetters();
+  let order, round = 0, earned = 0;
+  if (res && res.order) { order = res.order; round = res.round; earned = res.earned; }
+  else order = [...shuffle(pool), ...shuffle(pool).slice(0, 2)].map(x => [x.L, Math.floor(Math.random() * x.kws.length)]);
+  const ROUNDS = order.length;
 
   function play() {
+    Resume.save('listen', { order, round, earned });
     const app = screen('מה שמעת?');
-    const item = order[round];
-    const kw = pick(item.kws);
-    const lower = round >= ROUNDS / 2;
+    const item = findLetter(order[round][0]);
+    const kw = item.kws[order[round][1]] || item.kws[0];
+    const atEnd = !!kw.end;
+    const lower = round >= Math.floor(ROUNDS / 2);
     const show = L => lower ? L.toLowerCase() : L;
-    const others = shuffle(ABC.filter(x => x !== item.L)).slice(0, 2);
+    const others = shuffle(pool.map(x => x.L).filter(x => x !== item.L)).slice(0, 2);
     const options = shuffle([item.L, ...others]);
     let solved = false;
     const sayWord = () => Speech.en(kw.w, .7);
 
     const reveal = h('div', { class: 'word-reveal en' });
     const info = h('div', { class: 'hint blue hidden' });
-    const nextBtn = h('button', { class: 'btn green wide hidden', onclick: () => {
-      round++; if (round >= ROUNDS) EndScreen('listen', earned, StageListen, 1); else play();
-    } }, round === ROUNDS - 1 ? 'סיום 🏁' : 'הבא ←');
+    const nextBtn = nextButton(round === ROUNDS - 1, () => {
+      round++; if (round >= ROUNDS) EndScreen('listen', earned, () => StageListen(), 1); else play();
+    });
     const msg = h('p', { class: 'sub' }, 'לחץ על התמונה כדי לשמוע שוב');
 
     const choices = h('div', { class: 'choices' }, options.map(L => {
       const b = h('button', { class: 'choice en', type: 'button', 'aria-label': L }, show(L));
-      b.addEventListener('click', async () => {
+      b.addEventListener('click', () => {
         if (solved) return;
         if (L === item.L) {
           solved = true; b.classList.add('right'); pop(b); burst(b); addStar('listen'); earned++;
-          reveal.innerHTML = '';
           const shown = lower ? kw.w : kw.w.toUpperCase();
-          reveal.append(h('b', null, shown[0]), shown.slice(1));
+          reveal.innerHTML = '';
+          if (atEnd) reveal.append(shown.slice(0, -1), h('b', null, shown.slice(-1)));
+          else reveal.append(h('b', null, shown[0]), shown.slice(1));
           info.innerHTML = '';
           info.append('האות ', en(show(item.L)), ' נשמעת כמו ', h('b', null, item.snd), ` · ${kw.he}`);
           info.classList.remove('hidden'); nextBtn.classList.remove('hidden');
           msg.textContent = 'נכון! 🎉';
           pop(reveal);
-          await Speech.en(kw.w, .7);
+          Speech.en(kw.w, .7);
+          Resume.save('listen', { order, round: round + 1 < ROUNDS ? round + 1 : round, earned });
         } else {
           b.classList.add('wrong'); shake(b);
-          msg.textContent = 'כמעט! הקשב לצליל הראשון ונסה שוב 🙂';
+          msg.textContent = atEnd ? 'כמעט! הקשב לצליל האחרון ונסה שוב 🙂' : 'כמעט! הקשב לצליל הראשון ונסה שוב 🙂';
           sayWord();
         }
       });
@@ -440,7 +628,7 @@ function StageListen() {
     }));
 
     app.append(progressDots(ROUNDS, round),
-      h('div', { class: 'prompt' }, 'באיזו אות מתחילה המילה?'),
+      h('div', { class: 'prompt' }, atEnd ? 'באיזו אות נגמרת המילה?' : 'באיזו אות מתחילה המילה?'),
       speakerPic(kw.e, sayWord), reveal, msg, choices, info, nextBtn);
     enter(choices);
     setTimeout(sayWord, 350);
@@ -449,25 +637,32 @@ function StageListen() {
 }
 
 /* =========================================================
-   Stage 2: זוגות (upper <-> lower memory) + b/d challenge
+   Stage 2: זוגות (upper <-> lower memory) + mirror letters
    ========================================================= */
 function flipTo(el, fn) {
   if (!G) { fn(); return; }
   G.to(el, { scaleX: 0, duration: .12, ease: 'power1.in', onComplete() { fn(); G.to(el, { scaleX: 1, duration: .14, ease: 'power1.out', clearProps: 'transform' }); } });
 }
-function StagePairs() {
+function StagePairs(res) {
   const app = screen('זוגות');
-  const cards = shuffle(LETTERS.flatMap(l => [{ l, face: l.L, low: false }, { l, face: l.L.toLowerCase(), low: true }]));
-  let open = [], lock = false, matched = 0, tries = 0, earned = 0;
-  const pairsEl = h('span', null, 'זוגות: 0/8');
-  const triesEl = h('span', null, 'ניסיונות: 0');
+  const pool = newLetters(), N = pool.length;
+  let deck, matched, tries = 0, earned = 0;
+  if (res && res.deck) { deck = res.deck; matched = new Set(res.matched); tries = res.tries; earned = res.earned; }
+  else { deck = shuffle(pool.flatMap(l => [l.L, l.L.toLowerCase()])); matched = new Set(); }
+  const save = () => Resume.save('pairs', { deck, matched: [...matched], tries, earned });
+  save();
+  let open = [], lock = false;
+  const pairsEl = h('span', null, `זוגות: ${matched.size}/${N}`);
+  const triesEl = h('span', null, 'ניסיונות: ' + tries);
 
   const showFront = (b, c) => { b.innerHTML = ''; b.classList.add('open'); b.append(en(c.face)); };
   const showBack = b => { b.innerHTML = ''; b.classList.remove('open'); b.append(h('span', { class: 'back' }, '⭐')); };
+  const markMatch = (b, c) => { showFront(b, c); b.classList.add('match'); b.append(h('small', null, c.l.kws[0].e)); };
 
-  const grid = h('div', { class: 'memory' }, cards.map(c => {
+  const cards = deck.map(face => ({ face, l: findLetter(face), low: face !== face.toUpperCase() }));
+  const grid = h('div', { class: 'memory' + (cards.length > 16 ? ' many' : '') }, cards.map(c => {
     const b = h('button', { class: 'mcard' + (c.low ? ' low' : ''), type: 'button', 'aria-label': 'קלף', 'data-k': c.l.L });
-    showBack(b);
+    if (matched.has(c.l.L)) markMatch(b, c); else showBack(b);
     b.addEventListener('click', () => {
       if (lock || b.classList.contains('open') || b.classList.contains('match')) return;
       flipTo(b, () => showFront(b, c));
@@ -476,16 +671,16 @@ function StagePairs() {
       tries++; triesEl.textContent = 'ניסיונות: ' + tries;
       const [x, y] = open; open = [];
       if (x.c.l === y.c.l) {
-        matched++; pairsEl.textContent = `זוגות: ${matched}/8`;
+        matched.add(x.c.l.L); pairsEl.textContent = `זוגות: ${matched.size}/${N}`;
         const kw = x.c.l.kws[0];
         setTimeout(() => {
           for (const it of [x, y]) { it.b.classList.add('match'); it.b.append(h('small', null, kw.e)); pop(it.b); }
-          burst(y.b, 8); addStar('pairs'); earned++;
+          burst(y.b, 8); addStar('pairs'); earned++; save();
           Speech.en(`${x.c.l.L.toLowerCase()}, ${kw.w}`, .75);
-          if (matched === 8) setTimeout(done, 900);
+          if (matched.size === N) setTimeout(done, 900);
         }, 260);
       } else {
-        lock = true;
+        lock = true; save();
         setTimeout(() => { shake(x.b); shake(y.b); }, 300);
         setTimeout(() => { flipTo(x.b, () => showBack(x.b)); flipTo(y.b, () => showBack(y.b)); lock = false; }, 1100);
       }
@@ -495,11 +690,13 @@ function StagePairs() {
 
   const doneBox = h('div', { class: 'hidden' });
   function done() {
+    const set = curLevel().mirror;
+    Resume.save('mirror', { earned });
     doneBox.className = 'card';
     doneBox.style.marginTop = '16px'; doneBox.style.textAlign = 'center';
     doneBox.append(h('div', { class: 'prompt' }, `מצאת את כל הזוגות ב־${tries} ניסיונות! 🎉`),
-      h('p', { class: 'sub' }, 'עכשיו אתגר קטן: האותיות ', en('b'), ' ו־', en('d'), ' נראות כמו מראה. בוא נלמד להבדיל ביניהן.'),
-      h('button', { class: 'btn orange wide', onclick: () => BDChallenge(earned) }, 'לאתגר b או d ←'));
+      h('p', { class: 'sub' }, 'עכשיו אתגר קטן: האותיות ', set.flatMap((L, i) => [i ? ' ' : '', en(L)]), ' נראות כמו מראה. בוא נלמד להבדיל ביניהן.'),
+      h('button', { class: 'btn orange wide', onclick: () => MirrorChallenge(earned) }, 'לאתגר אותיות מראה ←'));
     enter(doneBox); burst(doneBox, 18); checkBreak();
     doneBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
@@ -508,44 +705,49 @@ function StagePairs() {
     h('p', { class: 'sub' }, 'הפוך שני קלפים. אם זו אותה אות, מצאת זוג!'),
     h('div', { class: 'counter' }, pairsEl, triesEl), grid, doneBox);
   enter(grid);
+  if (matched.size === N) setTimeout(done, 300);
 }
 
-const BD_WORDS = {
-  b: [{ w: 'bed', e: '🛏️', he: 'מיטה' }, { w: 'bag', e: '🎒', he: 'תיק' }, { w: 'bus', e: '🚌', he: 'אוטובוס' }, { w: 'bee', e: '🐝', he: 'דבורה' }, { w: 'ball', e: '⚽', he: 'כדור' }, { w: 'banana', e: '🍌', he: 'בננה' }],
-  d: [{ w: 'dog', e: '🐶', he: 'כלב' }, { w: 'duck', e: '🦆', he: 'ברווז' }, { w: 'door', e: '🚪', he: 'דלת' }, { w: 'dad', e: '👨', he: 'אבא' }, { w: 'dolphin', e: '🐬', he: 'דולפין' }, { w: 'drum', e: '🥁', he: 'תוף' }],
-};
-function BDChallenge(earnedBefore = 0) {
+function MirrorChallenge(earnedBefore = 0, res) {
   const ROUNDS = 8;
-  const items = shuffle([...shuffle(BD_WORDS.b).slice(0, 4).map(x => ({ ...x, L: 'b' })), ...shuffle(BD_WORDS.d).slice(0, 4).map(x => ({ ...x, L: 'd' }))]);
-  let round = 0, earned = earnedBefore;
+  const set = curLevel().mirror;
+  let items, round = 0, earned = earnedBefore;
+  if (res && res.items) { items = res.items; round = res.round; earned = res.earned; }
+  else {
+    const pools = Object.fromEntries(set.map(L => [L, shuffle(MIRROR_WORDS[L].map((_, i) => i))]));
+    items = shuffle(Array.from({ length: ROUNDS }, (_, i) => { const L = set[i % set.length]; const p = pools[L]; return [L, p[Math.floor(i / set.length) % p.length]]; }));
+  }
 
   function play() {
-    const app = screen('אתגר b או d');
-    const it = items[round];
+    Resume.save('mirror', { items, round, earned });
+    const app = screen('אתגר אותיות מראה');
+    const [L, wi] = items[round];
+    const it = MIRROR_WORDS[L][wi];
     let solved = false;
     const sayWord = () => Speech.en(it.w, .7);
-    const hint = h('div', { class: 'hint bd-hint' },
-      h('div', { class: 'bedword en', 'aria-label': 'bed' }, h('b', null, 'b'), 'e', h('i', null, 'd')),
-      h('p', null, '🛏️ טריק: המילה ', en('bed'), ' נראית כמו מיטה.', h('br'),
-        h('b', null, 'b'), ' – קודם קו, אחר כך בטן.', h('br'),
-        h('b', null, 'd'), ' – קודם בטן, אחר כך קו.'));
+    const hint = h('div', { class: 'hint mirror-hint' },
+      h('div', { class: 'letters en' }, set.map(x => h('span', null, x))),
+      set.includes('b') && set.includes('d') ? h('p', null, '🛏️ טריק: המילה ', en('bed'), ' נראית כמו מיטה.') : null,
+      set.map(x => h('p', null, h('b', { class: 'en' }, x), ' – ', MIRROR_RULE[x])));
     const reveal = h('div', { class: 'word-reveal en' });
     const msg = h('p', { class: 'sub' }, 'לחץ על התמונה כדי לשמוע שוב');
-    const nextBtn = h('button', { class: 'btn green wide hidden', onclick: () => {
-      round++; if (round >= ROUNDS) EndScreen('pairs', earned, StagePairs, 2); else play();
-    } }, round === ROUNDS - 1 ? 'סיום 🏁' : 'הבא ←');
-    const choices = h('div', { class: 'choices two' }, shuffle(['b', 'd']).map(L => {
-      const b = h('button', { class: 'choice en', type: 'button', 'aria-label': L }, L);
+    const nextBtn = nextButton(round === ROUNDS - 1, () => {
+      round++; if (round >= ROUNDS) EndScreen('pairs', earned, () => StagePairs(), 2); else play();
+    });
+    const cls = set.length === 2 ? 'choices two' : set.length === 4 ? 'choices four' : 'choices';
+    const choices = h('div', { class: cls }, shuffle(set).map(x => {
+      const b = h('button', { class: 'choice en', type: 'button', 'aria-label': x }, x);
       b.addEventListener('click', () => {
         if (solved) return;
-        if (L === it.L) {
+        if (x === L) {
           solved = true; b.classList.add('right'); pop(b); burst(b); addStar('pairs'); earned++;
           reveal.innerHTML = ''; reveal.append(h('b', null, it.w[0]), it.w.slice(1));
           pop(reveal); msg.textContent = `נכון! ${it.he} 🎉`;
           nextBtn.classList.remove('hidden'); sayWord();
+          Resume.save('mirror', { items, round: round + 1 < ROUNDS ? round + 1 : round, earned });
         } else {
           b.classList.add('wrong'); shake(b); pop(hint);
-          msg.textContent = 'כמעט! הסתכל על הטריק של bed ונסה שוב 🙂';
+          msg.textContent = 'כמעט! הסתכל על הכללים למעלה ונסה שוב 🙂';
           sayWord();
         }
       });
@@ -566,29 +768,34 @@ function tipEl(tip) {
   if (!tip) return null;
   return h('div', { class: 'hint' }, '💡 ', tip.map((p, i) => i % 2 ? en(fmt(p)) : p));
 }
-function StageBuild() {
-  const ROUNDS = 8;
-  const list = sessionWords();
-  let round = 0, earned = 0;
+function StageBuild(res) {
+  let list, round = 0, earned = 0;
+  if (res && res.list) { list = res.list.map(findWord).filter(Boolean); round = res.round; earned = res.earned; }
+  else list = sessionWords();
+  const ROUNDS = list.length;
+  const saveAt = r => Resume.save('build', { list: list.map(w => w.w), round: r, earned });
 
   function play() {
+    saveAt(round);
     const app = screen('בונים מילה');
     const item = list[round];
     const letters = [...fmt(item.w)];
-    const distract = shuffle(ABC.map(fmt).filter(x => !letters.includes(x))).slice(0, 2);
+    const distract = shuffle(knownABC().map(fmt).filter(x => !letters.includes(x))).slice(0, 2);
     const tiles = shuffle([...letters, ...distract]).map(ch => ({ ch, used: false, el: null }));
     const slots = letters.map(() => null);
     let solved = false, busy = false;
     const sayWord = () => Speech.en(item.w, .7);
+    const size = slotSizeFor(letters.length);
 
     const msg = h('p', { class: 'sub' }, 'לחץ על האותיות לפי הסדר. הן נכנסות משמאל לימין.');
     const extra = h('div');
-    const nextBtn = h('button', { class: 'btn green wide hidden', onclick: () => {
-      round++; if (round >= ROUNDS) EndScreen('build', earned, StageBuild, 3); else play();
-    } }, round === ROUNDS - 1 ? 'סיום 🏁' : 'הבא ←');
+    const nextBtn = nextButton(round === ROUNDS - 1, () => {
+      round++; if (round >= ROUNDS) EndScreen('build', earned, () => StageBuild(), 3); else play();
+    });
 
     const slotEls = letters.map((_, i) => {
       const b = h('button', { class: 'slot en', type: 'button', 'aria-label': 'משבצת ' + (i + 1) });
+      sizeSlot(b, size);
       b.addEventListener('click', () => {
         if (solved || busy || !slots[i]) return;
         slots[i].used = false; slots[i] = null; refresh();
@@ -626,6 +833,7 @@ function StageBuild() {
         const t = tipEl(item.tip); if (t) { extra.append(t); enter(t); }
         nextBtn.classList.remove('hidden'); hintBtn.classList.add('hidden');
         sayWord();
+        saveAt(round + 1 < ROUNDS ? round + 1 : round);
         return;
       }
       busy = true;
@@ -666,34 +874,40 @@ function StageBuild() {
 /* =========================================================
    Stage 4: מה חסר? (missing letter, mostly vowels)
    ========================================================= */
-function StageMissing() {
-  const ROUNDS = 8;
-  const list = sessionWords();
-  let round = 0, earned = 0;
+const VOWELS = 'aeiou';
+function StageMissing(res) {
+  let list, round = 0, earned = 0;
+  if (res && res.list) { list = res.list.map(findWord).filter(Boolean); round = res.round; earned = res.earned; }
+  else list = sessionWords();
+  const ROUNDS = list.length;
+  const saveAt = r => Resume.save('missing', { list: list.map(w => w.w), round: r, earned });
+  const known = knownABC();
+  const knownVowels = known.map(x => x.toLowerCase()).filter(x => VOWELS.includes(x));
 
   function play() {
+    saveAt(round);
     const app = screen('מה חסר?');
     const item = list[round];
     const letters = [...fmt(item.w)];
-    const vowelIdx = letters.map((c, i) => 'ae'.includes(c.toLowerCase()) ? i : -1).filter(i => i >= 0);
+    const vowelIdx = letters.map((c, i) => VOWELS.includes(c.toLowerCase()) ? i : -1).filter(i => i >= 0);
     const miss = vowelIdx.length && Math.random() < .7 ? pick(vowelIdx) : Math.floor(Math.random() * letters.length);
     const answer = letters[miss];
-    const isVowel = 'ae'.includes(answer.toLowerCase());
-    let pool = ABC.map(fmt).filter(x => x !== answer);
-    const distract = isVowel
-      ? [fmt(answer.toLowerCase() === 'a' ? 'e' : 'a'), pick(pool.filter(x => !'ae'.includes(x.toLowerCase())))]
-      : shuffle(pool).slice(0, 2);
+    const isVowel = VOWELS.includes(answer.toLowerCase());
+    const consonants = known.map(fmt).filter(x => x !== answer && !VOWELS.includes(x.toLowerCase()));
+    const otherVowels = knownVowels.map(fmt).filter(x => x !== answer);
+    const distract = isVowel ? [pick(otherVowels), pick(consonants)] : shuffle(known.map(fmt).filter(x => x !== answer)).slice(0, 2);
     const options = shuffle([answer, ...distract]);
     let solved = false;
     const sayWord = () => Speech.en(item.w, .7);
+    const size = slotSizeFor(letters.length);
 
-    const slotEls = letters.map((c, i) => h('span', { class: 'slot en ' + (i === miss ? 'blank' : 'filled') }, i === miss ? '?' : c));
+    const slotEls = letters.map((c, i) => { const s = h('span', { class: 'slot en ' + (i === miss ? 'blank' : 'filled') }, i === miss ? '?' : c); sizeSlot(s, size); return s; });
     const blank = slotEls[miss];
     const msg = h('p', { class: 'sub' }, 'איזו אות חסרה? לחץ על התמונה כדי לשמוע');
     const extra = h('div');
-    const nextBtn = h('button', { class: 'btn green wide hidden', onclick: () => {
-      round++; if (round >= ROUNDS) EndScreen('missing', earned, StageMissing, 4); else play();
-    } }, round === ROUNDS - 1 ? 'סיום 🏁' : 'הבא ←');
+    const nextBtn = nextButton(round === ROUNDS - 1, () => {
+      round++; if (round >= ROUNDS) EndScreen('missing', earned, () => StageMissing(), 4); else play();
+    });
 
     const choices = h('div', { class: 'choices' }, options.map(L => {
       const b = h('button', { class: 'choice en', type: 'button', 'aria-label': L }, L);
@@ -708,6 +922,7 @@ function StageMissing() {
           const t = tipEl(item.tip); if (t) { extra.append(t); enter(t); }
           nextBtn.classList.remove('hidden');
           sayWord();
+          saveAt(round + 1 < ROUNDS ? round + 1 : round);
         } else {
           b.classList.add('wrong'); shake(b);
           blank.textContent = L; blank.classList.add('bad'); shake(blank);
@@ -720,7 +935,7 @@ function StageMissing() {
     }));
 
     app.append(progressDots(ROUNDS, round),
-      ...(round === 0 ? [h('div', { class: 'hint blue' }, '💡 באנגלית אין ניקוד. את הצלילים אַ ו־אֶ כותבים עם האותיות ', en(fmt('a')), ' ו־', en(fmt('e')), '.')] : []),
+      ...(round === 0 ? [h('div', { class: 'hint blue' }, '💡 באנגלית אין ניקוד. את התנועות כותבים עם האותיות ', en(knownVowels.map(fmt).join(' ')), '.')] : []),
       h('div', { class: 'prompt' }, 'השלם את המילה: ', h('span', { style: 'color:var(--blue)' }, item.he)),
       speakerPic(item.e, sayWord),
       h('div', { class: 'build-wrap' }, h('div', { class: 'slots static', style: 'direction:ltr' }, slotEls)),
@@ -733,14 +948,19 @@ function StageMissing() {
 
 /* =========================================================
    Stage 5: כותבים (finger tracing with stroke order)
-   Coordinates: box 100 wide x 120 tall. Caps 15..95, x-height 50..95, descender to 115.
+   Coordinates: box 100 wide x 120 tall. Caps 15..95, x-height 50..95, descender to ~113.
    ========================================================= */
-const T = 15, BL = 95, M = 55, XH = 50, XM = 72.5;
+const T = 15, BL = 95, M = 55, XH = 50, XM = 72.5, DS = 113;
 function arc(cx, cy, rx, ry, a0, a1) {
   const pts = [], n = Math.max(2, Math.ceil(Math.abs(a1 - a0) / 8));
   for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); }
   return pts;
 }
+const O_BIG = arc(50, M, 32, 40, -90, -450);
+const O_SMALL = arc(50, XM, 22, 22.5, -90, -450);
+const A_BOWL = arc(50, XM, 22, 22.5, -20, -380);       // counter-clockwise bowl (a, d, g, q)
+const B_BOWL = arc(50, XM, 22, 22.5, 180, 540);        // clockwise bowl (b, p)
+const P_TOP = [[25, T], [52, T], ...arc(52, 35, 20, 20, -90, 90), [25, M]];
 // each letter = list of strokes, in writing order; each stroke = points in writing direction
 const STROKES = {
   A: [[[50, T], [20, BL]], [[50, T], [80, BL]], [[32, 65], [68, 65]]],
@@ -751,14 +971,50 @@ const STROKES = {
   F: [[[25, T], [25, BL]], [[25, T], [72, T]], [[25, M], [64, M]]],
   G: [[...arc(52, M, 36, 40, -40, -360), [62, M]]],
   H: [[[25, T], [25, BL]], [[75, T], [75, BL]], [[25, M], [75, M]]],
-  a: [arc(50, XM, 22, 22.5, -20, -380), [[72, XH], [72, BL]]],
-  b: [[[28, T], [28, BL]], arc(50, XM, 22, 22.5, 180, 540)],
+  I: [[[50, T], [50, BL]], [[34, T], [66, T]], [[34, BL], [66, BL]]],
+  J: [[[62, T], [62, 76], ...arc(45, 76, 17, 19, 0, 180)]],
+  K: [[[25, T], [25, BL]], [[72, T], [25, 62]], [[40, 47], [75, BL]]],
+  L: [[[28, T], [28, BL], [72, BL]]],
+  M: [[[20, T], [20, BL]], [[20, T], [50, 68], [80, T], [80, BL]]],
+  N: [[[25, T], [25, BL]], [[25, T], [75, BL], [75, T]]],
+  O: [O_BIG],
+  P: [[[25, T], [25, BL]], P_TOP],
+  Q: [O_BIG, [[60, 78], [82, 100]]],
+  R: [[[25, T], [25, BL]], P_TOP, [[42, M], [75, BL]]],
+  S: [[...arc(50, 35, 24, 20, -20, -270), ...arc(50, 75, 24, 20, -90, 160)]],
+  T: [[[20, T], [80, T]], [[50, T], [50, BL]]],
+  U: [[[25, T], [25, 65], ...arc(50, 65, 25, 30, 180, 0), [75, T]]],
+  V: [[[20, T], [50, BL], [80, T]]],
+  W: [[[12, T], [30, BL], [50, 40], [70, BL], [88, T]]],
+  X: [[[22, T], [78, BL]], [[78, T], [22, BL]]],
+  Y: [[[22, T], [50, M]], [[78, T], [50, M], [50, BL]]],
+  Z: [[[22, T], [78, T], [22, BL], [78, BL]]],
+  a: [A_BOWL, [[72, XH], [72, BL]]],
+  b: [[[28, T], [28, BL]], B_BOWL],
   c: [arc(52, XM, 22, 22.5, -40, -320)],
-  d: [arc(50, XM, 22, 22.5, -20, -380), [[72, T], [72, BL]]],
+  d: [A_BOWL, [[72, T], [72, BL]]],
   e: [[[29, XM], [72, XM], ...arc(50.5, XM, 21.5, 22.5, 0, -320)]],
   f: [[...arc(62, 30, 14, 14, -20, -180), [48, BL]], [[34, XH], [66, XH]]],
-  g: [arc(50, XM, 22, 22.5, -20, -380), [[72, XH], [72, 101], ...arc(61, 101, 11, 11, 0, 170)]],
+  g: [A_BOWL, [[72, XH], [72, 101], ...arc(61, 101, 11, 11, 0, 170)]],
   h: [[[28, T], [28, BL]], [...arc(50, 72, 22, 22, 180, 360), [72, BL]]],
+  i: [[[50, XH], [50, BL]], [[50, 31], [50, 33]]],
+  j: [[[56, XH], [56, 101], ...arc(45, 101, 11, 11, 0, 170)], [[56, 31], [56, 33]]],
+  k: [[[28, T], [28, BL]], [[66, XH], [28, 78]], [[43, 67], [70, BL]]],
+  l: [[[50, T], [50, BL]]],
+  m: [[[22, XH], [22, BL]], [...arc(36, 65, 14, 15, 180, 360), [50, BL]], [...arc(64, 65, 14, 15, 180, 360), [78, BL]]],
+  n: [[[28, XH], [28, BL]], [...arc(50, 70, 22, 20, 180, 360), [72, BL]]],
+  o: [O_SMALL],
+  p: [[[28, XH], [28, DS]], B_BOWL],
+  q: [A_BOWL, [[72, XH], [72, DS]]],
+  r: [[[32, XH], [32, BL]], arc(52, 68, 20, 18, 180, 300)],
+  s: [[...arc(50, 61.25, 18, 11.25, -20, -270), ...arc(50, 83.75, 18, 11.25, -90, 160)]],
+  t: [[[45, 25], [45, 88], ...arc(54, 88, 9, 7, 180, 90)], [[32, XH], [62, XH]]],
+  u: [[[28, XH], [28, 73], ...arc(50, 73, 22, 22, 180, 0)], [[72, XH], [72, BL]]],
+  v: [[[25, XH], [50, BL], [75, XH]]],
+  w: [[[14, XH], [32, BL], [50, 60], [68, BL], [86, XH]]],
+  x: [[[28, XH], [72, BL]], [[72, XH], [28, BL]]],
+  y: [[[26, XH], [50, BL]], [[74, XH], [50, BL], [36, DS]]],
+  z: [[[28, XH], [72, XH], [28, BL], [72, BL]]],
 };
 function resample(pts, step = 2.5) {
   const out = [pts[0]];
@@ -790,28 +1046,27 @@ function makeTracer(letter, { onSuccess, onMsg }) {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // notebook lines
     ctx.lineWidth = .7;
     for (const [y, dash, col] of [[T, [3, 3], '#E6DAC4'], [XH, [3, 3], '#E6DAC4'], [BL, [], '#CDBB98']]) {
       ctx.setLineDash(dash); ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(4, y); ctx.lineTo(96, y); ctx.stroke();
     }
     ctx.setLineDash([]);
-    // guide
     ctx.strokeStyle = done ? '#C8F0DA' : '#E8ECF4'; ctx.lineWidth = 13;
     strokes.forEach(s => { path(s); ctx.stroke(); });
     ctx.strokeStyle = done ? '#7FD3A6' : '#B4BED0'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
     strokes.forEach(s => { path(s); ctx.stroke(); });
     ctx.setLineDash([]);
-    // direction arrows + start numbers
     if (!done) {
       const placed = [];
       strokes.forEach((s, i) => {
-        const fi = Math.min(s.length - 2, Math.max(3, Math.floor(s.length * .45)));
-        const [ax, ay] = s[fi], [bx, by] = s[fi + 1];
-        const ang = Math.atan2(by - ay, bx - ax);
-        ctx.strokeStyle = '#8A96AD'; ctx.lineWidth = 1.6; ctx.beginPath();
-        ctx.moveTo(ax - Math.cos(ang - .6) * 4.5, ay - Math.sin(ang - .6) * 4.5); ctx.lineTo(ax, ay);
-        ctx.lineTo(ax - Math.cos(ang + .6) * 4.5, ay - Math.sin(ang + .6) * 4.5); ctx.stroke();
+        if (s.length >= 6) {
+          const fi = Math.min(s.length - 2, Math.max(3, Math.floor(s.length * .45)));
+          const [ax, ay] = s[fi], [bx, by] = s[fi + 1];
+          const ang = Math.atan2(by - ay, bx - ax);
+          ctx.strokeStyle = '#8A96AD'; ctx.lineWidth = 1.6; ctx.beginPath();
+          ctx.moveTo(ax - Math.cos(ang - .6) * 4.5, ay - Math.sin(ang - .6) * 4.5); ctx.lineTo(ax, ay);
+          ctx.lineTo(ax - Math.cos(ang + .6) * 4.5, ay - Math.sin(ang + .6) * 4.5); ctx.stroke();
+        }
         let [mx, my] = s[0];
         if (placed.some(([px, py]) => Math.hypot(px - mx, py - my) < 8)) { const q = s[Math.min(s.length - 1, 4)]; [mx, my] = q; }
         placed.push([mx, my]);
@@ -820,12 +1075,9 @@ function makeTracer(letter, { onSuccess, onMsg }) {
         ctx.fillText(String(i + 1), mx, my + .3);
       });
     }
-    // parts not covered yet
     if (missing && !done) { ctx.fillStyle = 'rgba(255,138,61,.75)'; missing.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill(); }); }
-    // child's ink
     ctx.strokeStyle = done ? '#22A86A' : '#2F6FED'; ctx.lineWidth = 6;
     ink.forEach(s => { if (s.length === 1) { ctx.beginPath(); ctx.arc(s[0][0], s[0][1], 3, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill(); } else { path(s); ctx.stroke(); } });
-    // demo
     if (demo) {
       ctx.strokeStyle = 'rgba(255,138,61,.9)'; ctx.lineWidth = 5;
       for (let i = 0; i < demo.si; i++) { path(strokes[i]); ctx.stroke(); }
@@ -852,19 +1104,25 @@ function makeTracer(letter, { onSuccess, onMsg }) {
   const end = () => { if (!drawing) return; drawing = false; check(false); };
   canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('pointerleave', end);
 
+  // every stroke must be mostly covered (so a missing dot or bar is caught), and ink must stay near the letter
   function evaluate() {
     const pts = ink.flat();
-    if (pts.length < 4) return { cov: 0, prec: 0, miss: samples };
-    const T2 = 9 * 9, P2 = 12 * 12; let covered = 0, inside = 0; const miss = [];
-    for (const [sx, sy] of samples) { let ok = false; for (const [x, y] of pts) { const dx = sx - x, dy = sy - y; if (dx * dx + dy * dy <= T2) { ok = true; break; } } ok ? covered++ : miss.push([sx, sy]); }
+    if (pts.length < 1) return { cov: 0, minStroke: 0, prec: 0, miss: samples };
+    const T2 = 9 * 9, P2 = 12 * 12; let covered = 0, inside = 0, minStroke = 1; const miss = [];
+    for (const s of strokes) {
+      let c = 0;
+      for (const [sx, sy] of s) { let ok = false; for (const [x, y] of pts) { const dx = sx - x, dy = sy - y; if (dx * dx + dy * dy <= T2) { ok = true; break; } } if (ok) c++; else miss.push([sx, sy]); }
+      covered += c; minStroke = Math.min(minStroke, c / s.length);
+    }
     for (const [x, y] of pts) { for (const [sx, sy] of samples) { const dx = sx - x, dy = sy - y; if (dx * dx + dy * dy <= P2) { inside++; break; } } }
-    return { cov: covered / samples.length, prec: inside / pts.length, miss };
+    return { cov: covered / samples.length, minStroke, prec: inside / pts.length, miss };
   }
   function check(manual) {
     if (done) return;
     const r = evaluate();
-    if (r.cov >= .85 && r.prec >= .8) { done = true; missing = null; render(); onSuccess && onSuccess(canvas); return; }
-    if (r.cov >= .85) { onMsg && onMsg('יצאת קצת מהקו האפור. לחץ "נקה" ונסה שוב 🙂'); return; }
+    const coveredEnough = r.cov >= .85 && r.minStroke >= .75;
+    if (coveredEnough && r.prec >= .8) { done = true; missing = null; render(); onSuccess && onSuccess(canvas); return; }
+    if (coveredEnough) { onMsg && onMsg('יצאת קצת מהקו האפור. לחץ "נקה" ונסה שוב 🙂'); return; }
     if (manual) { missing = r.miss; render(); onMsg && onMsg(ink.length ? 'כמעט! עבור גם על הנקודות הכתומות 🙂' : 'התחל בנקודה 1 וכתוב באצבע לפי החץ'); }
   }
   function clear() { if (done) return; ink.length = 0; missing = null; render(); }
@@ -872,7 +1130,7 @@ function makeTracer(letter, { onSuccess, onMsg }) {
   function showDemo() {
     if (done) return; stopDemo(); ink.length = 0; missing = null;
     demo = { si: 0, pi: 0 }; let last = performance.now(), pause = 0;
-    const SPEED = 26; // samples per second
+    const SPEED = 26;
     const step = now => {
       const dt = (now - last) / 1000; last = now;
       if (pause > 0) pause -= dt; else {
@@ -899,31 +1157,34 @@ function traceTools(tr) {
 function StageWrite() {
   const app = screen('כותבים');
   const kind = state.caseMode === 'upper' ? 'גדולות' : 'קטנות';
+  const lv = curLevel();
   app.append(
     h('div', { class: 'prompt' }, 'מה כותבים היום?'),
     h('p', { class: 'sub' }, `כותבים באותיות ${kind} (אפשר לשנות בתפריט הראשי).`),
     h('div', { class: 'mode-list' },
       h('button', { class: 'stage', onclick: () => WriteLetters() },
         h('span', { class: 'num' }, '✏️'),
-        h('span', { class: 'txt' }, h('b', null, 'אות אחרי אות'), h('span', null, 'כל האותיות מ־', en(fmt('a')), ' עד ', en(fmt('h')), ', עם מספרים וחצים'))),
+        h('span', { class: 'txt' }, h('b', null, 'אות אחרי אות'), h('span', null, 'האותיות של הרמה: ', en(fmt(lv.letters[0])), ' עד ', en(fmt(lv.letters[lv.letters.length - 1]))))),
       h('button', { class: 'stage', onclick: () => WriteWords() },
         h('span', { class: 'num' }, '📝'),
         h('span', { class: 'txt' }, h('b', null, 'מילה שלמה'), h('span', null, 'כותבים מילה, אות אחרי אות, משמאל לימין')))),
     h('div', { class: 'hint blue' }, '💡 מתחילים תמיד בנקודה ', h('b', null, '1'), ' וממשיכים לפי החץ. לא בטוח? לחץ "הראה לי".'));
 }
 
-function WriteLetters() {
-  const order = ABC.map(fmt);
+function WriteLetters(res) {
+  const order = curLevel().letters.split('').map(fmt);
   let idx = 0, earned = 0;
+  if (res && res.idx != null) { idx = res.idx; earned = res.earned; }
   function play() {
+    Resume.save('write-letters', { idx, round: idx, earned });
     const app = screen('כותבים אותיות');
     const ch = order[idx];
-    const info = LETTERS[idx];
-    const kw = info.kws[0];
+    const kw = findLetter(ch).kws[0];
     const msg = h('p', { class: 'sub' }, 'התחל בנקודה 1 וכתוב באצבע לפי החץ');
-    const nextBtn = h('button', { class: 'btn green wide hidden', style: 'margin-top:12px', onclick: () => {
-      idx++; if (idx >= order.length) EndScreen('write', earned, StageWrite); else play();
-    } }, idx === order.length - 1 ? 'סיום 🏁' : 'הבא ←');
+    const nextBtn = nextButton(idx === order.length - 1, () => {
+      idx++; if (idx >= order.length) EndScreen('write', earned, () => StageWrite()); else play();
+    });
+    nextBtn.style.marginTop = '12px';
     const tr = makeTracer(ch, {
       onMsg: t => { msg.textContent = t; },
       onSuccess: c => {
@@ -931,6 +1192,7 @@ function WriteLetters() {
         msg.innerHTML = ''; msg.append('יפה מאוד! ', en(ch), ' כמו ', en(fmt(kw.w)), ' 🎉');
         nextBtn.classList.remove('hidden'); tools.classList.add('hidden');
         Speech.en(kw.w, .75);
+        Resume.save('write-letters', { idx: idx + 1 < order.length ? idx + 1 : idx, round: idx + 1 < order.length ? idx + 1 : idx, earned });
       },
     });
     cleanup = tr.destroy;
@@ -945,10 +1207,13 @@ function WriteLetters() {
   play();
 }
 
-function WriteWords() {
-  const list = [...shuffle(wordsByLevel(1)).slice(0, 2), ...shuffle(wordsByLevel(2)).slice(0, 1), ...shuffle(wordsByLevel(3)).slice(0, 1)];
-  let wi = 0, earned = 0;
+function WriteWords(res) {
+  let list, wi = 0, earned = 0;
+  if (res && res.list) { list = res.list.map(findWord).filter(Boolean); wi = res.wi; earned = res.earned; }
+  else list = [...shuffle(levelWords(1)).slice(0, 2), ...shuffle(levelWords(2)).slice(0, 1), ...shuffle(levelWords(3)).slice(0, 1)];
+  const saveAt = w => Resume.save('write-words', { list: list.map(x => x.w), wi: w, round: w, earned });
   function playWord() {
+    saveAt(wi);
     const item = list[wi];
     const letters = [...fmt(item.w)];
     let li = 0;
@@ -957,9 +1222,10 @@ function WriteWords() {
       const ch = letters[li];
       const track = h('div', { class: 'word-track' }, letters.map((c, i) => h('span', { class: 'en ' + (i < li ? 'done' : i === li ? 'now' : '') }, c)));
       const msg = h('p', { class: 'sub' }, `אות ${li + 1} מתוך ${letters.length}. מתחילים משמאל →`);
-      const nextBtn = h('button', { class: 'btn green wide hidden', style: 'margin-top:12px', onclick: () => {
-        wi++; if (wi >= list.length) EndScreen('write', earned, StageWrite); else playWord();
-      } }, wi === list.length - 1 ? 'סיום 🏁' : 'למילה הבאה ←');
+      const nextBtn = nextButton(wi === list.length - 1, () => {
+        wi++; if (wi >= list.length) EndScreen('write', earned, () => StageWrite()); else playWord();
+      }, 'למילה הבאה ←');
+      nextBtn.style.marginTop = '12px';
       const tr = makeTracer(ch, {
         onMsg: t => { msg.textContent = t; },
         onSuccess: c => {
@@ -970,6 +1236,7 @@ function WriteWords() {
           msg.innerHTML = ''; msg.append('כתבת את המילה ', en(fmt(item.w)), ` = ${item.he}! 🎉`);
           tools.classList.add('hidden'); nextBtn.classList.remove('hidden');
           Speech.en(item.w, .7);
+          saveAt(wi + 1 < list.length ? wi + 1 : wi);
         },
       });
       cleanup = tr.destroy;
@@ -989,11 +1256,11 @@ function WriteWords() {
    Stage registry
    ========================================================= */
 STAGES.push(
-  { key: 'listen',  icon: '👂', name: 'מה שמעת?',   desc: 'שומעים מילה ובוחרים באיזו אות היא מתחילה', run: StageListen },
-  { key: 'pairs',   icon: '🃏', name: 'זוגות',      desc: 'מתאימים אות גדולה לקטנה, ואתגר b או d', run: StagePairs },
-  { key: 'build',   icon: '🧩', name: 'בונים מילה', desc: 'רואים תמונה ובונים את המילה משמאל לימין', run: StageBuild },
-  { key: 'missing', icon: '🔍', name: 'מה חסר?',    desc: 'משלימים את האות שחסרה במילה', run: StageMissing },
-  { key: 'write',   icon: '✏️', name: 'כותבים',     desc: 'כותבים אותיות ומילים באצבע', run: StageWrite },
+  { key: 'listen',  icon: '👂', name: 'מה שמעת?',   desc: 'שומעים מילה ובוחרים את האות', run: () => StageListen() },
+  { key: 'pairs',   icon: '🃏', name: 'זוגות',      desc: 'אות גדולה ואות קטנה, ואתגר אותיות מראה', run: () => StagePairs() },
+  { key: 'build',   icon: '🧩', name: 'בונים מילה', desc: 'רואים תמונה ובונים את המילה משמאל לימין', run: () => StageBuild() },
+  { key: 'missing', icon: '🔍', name: 'מה חסר?',    desc: 'משלימים את האות שחסרה במילה', run: () => StageMissing() },
+  { key: 'write',   icon: '✏️', name: 'כותבים',     desc: 'כותבים אותיות ומילים באצבע', run: () => StageWrite() },
 );
 
 renderStars();
