@@ -281,6 +281,108 @@ const WORDS = [
   { L:3, d:3, w:'yellow',he:'צהוב',    e:'💛', tip: ['שתי אותיות ', 'l', ' אבל שומעים צליל אחד'] },
 ];
 
+// More words per level: [word, hebrew, emoji]. Difficulty comes from length, tip from spelling patterns.
+const EXTRA_WORDS = {
+  1: [ // only A–H exist in level 1, so this list is short on purpose
+    ['add','חיבור','➕'], ['abc','אלף־בית','🔤'], ['beg','להתחנן','🙏'], ['beef','בשר בקר','🥩'],
+    ['bead','חרוז','📿'], ['chef','שף','🧑‍🍳'], ['badge','תג','📛'], ['headache','כאב ראש','🤕'],
+  ],
+  2: [ // A–P
+    ['ball','כדור','⚽'], ['balloon','בלון','🎈'], ['banana','בננה','🍌'], ['bell','פעמון','🔔'],
+    ['camel','גמל','🐫'], ['candle','נר','🕯️'], ['cap','כובע מצחייה','🧢'], ['chain','שרשרת','⛓️'],
+    ['clock','שעון','⏰'], ['coin','מטבע','🪙'], ['cookie','עוגייה','🍪'], ['dice','קובייה','🎲'],
+    ['dog','כלב','🐶'], ['doll','בובה','🪆'], ['dolphin','דולפין','🐬'], ['eagle','נשר','🦅'],
+    ['flag','דגל','🚩'], ['fog','ערפל','🌫️'], ['food','אוכל','🍽️'], ['hook','וו','🪝'],
+    ['ice','קרח','🧊'], ['ink','דיו','🖋️'], ['jeep','ג׳יפ','🚙'], ['kid','ילד','🧒'],
+    ['knife','סכין','🔪'], ['lake','אגם','🏞️'], ['lamb','טלה','🐑'], ['leaf','עלה','🍃'],
+    ['lip','שפה','👄'], ['melon','מלון','🍈'], ['nail','ציפורן','💅'], ['nine','תשע','9️⃣'],
+    ['one','אחת','1️⃣'], ['onion','בצל','🧅'], ['pan','מחבת','🍳'], ['peach','אפרסק','🍑'],
+    ['pin','נעץ','📌'], ['pine','אורן','🌲'], ['plane','מטוס','✈️'], ['pool','בריכה','🏊'],
+    ['poodle','פודל','🐩'], ['ape','קוף גדול','🦍'], ['bone','עצם','🦴'], ['cone','גביע גלידה','🍦'],
+    ['chick','אפרוח','🐤'], ['chicken','עוף','🍗'], ['pineapple','אננס','🍍'], ['pancake','פנקייק','🥞'],
+    ['noodle','אטרייה','🍜'], ['bagel','בייגל','🥯'], ['pickle','מלפפון חמוץ','🥒'], ['mango','מנגו','🥭'],
+    ['mail','דואר','📫'], ['phone','טלפון','📱'], ['heel','עקב','👠'], ['medal','מדליה','🏅'],
+    ['pencil','עיפרון','✏️'], ['koala','קואלה','🐨'], ['lollipop','סוכרייה על מקל','🍭'], ['bacon','בייקון','🥓'],
+    ['police','משטרה','👮'], ['alien','חייזר','👽'], ['genie','ג׳יני','🧞'], ['elf','שדון','🧝'],
+    ['magic','קסם','🪄'], ['cabin','בקתה','🛖'], ['piano','פסנתר','🎹'], ['banjo','בנג׳ו','🪕'],
+    ['clap','מחיאת כפיים','👏'], ['dance','לרקוד','💃'], ['hello','שלום','👋'], ['angel','מלאך','👼'],
+    ['globe','גלובוס','🌍'], ['needle','מחט','🪡'], ['lock','מנעול','🔒'], ['big','גדול','🐘'],
+    ['cold','קר','🥶'], ['old','זקן','👴'], ['mom','אמא','👩'], ['man','גבר','🧔'],
+    ['golf','גולף','⛳'], ['canoe','קאנו','🛶'], ['bang','בום','💥'], ['flame','להבה','🔥'],
+    ['pie','פאי','🥧'], ['gem','אבן חן','💎'], ['film','סרט','🎞️'], ['bin','פח','🗑️'],
+    ['pail','דלי','🪣'], ['emoji','אימוג׳י','😜'], ['flamingo','פלמינגו','🦩'], ['hippo','היפופוטם','🦛'],
+    ['gecko','שממית','🦎'], ['clip','אטב','📎'], ['nap','תנומה','😴'], ['kimono','קימונו','👘'],
+    ['bikini','ביקיני','👙'], ['jog','ריצה קלה','🏃'], ['cola','קולה','🥤'], ['llama','לאמה','🦙'],
+  ],
+  3: [ // A–Z
+    ['cat','חתול','🐱'], ['rat','עכברוש','🐀'], ['bat','עטלף','🦇'], ['owl','ינשוף','🦉'],
+    ['cow','פרה','🐄'], ['ant','נמלה','🐜'], ['horse','סוס','🐴'], ['sheep','כבשה','🐑'],
+    ['goat','עז','🐐'], ['mouse','עכבר','🐭'], ['rabbit','ארנב','🐰'], ['bear','דוב','🐻'],
+    ['shark','כריש','🦈'], ['crab','סרטן','🦀'], ['snail','חילזון','🐌'], ['spider','עכביש','🕷️'],
+    ['parrot','תוכי','🦜'], ['turkey','תרנגול הודו','🦃'], ['monkey','קוף','🐒'], ['squid','דיונון','🦑'],
+    ['worm','תולעת','🪱'], ['butterfly','פרפר','🦋'], ['bird','ציפור','🐦'], ['deer','צבי','🦌'],
+    ['swan','ברבור','🦢'], ['unicorn','חד־קרן','🦄'], ['dragon','דרקון','🐉'], ['shrimp','שרימפס','🦐'],
+    ['rooster','תרנגול','🐓'], ['octopus','תמנון','🐙'],
+    ['cherry','דובדבן','🍒'], ['strawberry','תות','🍓'], ['grapes','ענבים','🍇'], ['pear','אגס','🍐'],
+    ['carrot','גזר','🥕'], ['corn','תירס','🌽'], ['bread','לחם','🍞'], ['butter','חמאה','🧈'],
+    ['cheese','גבינה','🧀'], ['pizza','פיצה','🍕'], ['burger','המבורגר','🍔'], ['taco','טאקו','🌮'],
+    ['salad','סלט','🥗'], ['soup','מרק','🍲'], ['rice','אורז','🍚'], ['tomato','עגבנייה','🍅'],
+    ['potato','תפוח אדמה','🥔'], ['donut','סופגנייה','🍩'], ['cupcake','קאפקייק','🧁'], ['waffle','ופל','🧇'],
+    ['sushi','סושי','🍣'], ['avocado','אבוקדו','🥑'], ['kiwi','קיווי','🥝'], ['tea','תה','🍵'],
+    ['sandwich','כריך','🥪'],
+    ['shoe','נעל','👟'], ['shirt','חולצה','👕'], ['dress','שמלה','👗'], ['glasses','משקפיים','👓'],
+    ['scarf','צעיף','🧣'], ['crown','כתר','👑'], ['ring','טבעת','💍'], ['key','מפתח','🔑'],
+    ['door','דלת','🚪'], ['chair','כיסא','🪑'], ['bath','אמבטיה','🛁'], ['car','מכונית','🚗'],
+    ['truck','משאית','🚚'], ['train','רכבת','🚆'], ['boat','סירה','⛵'], ['ship','ספינה','🚢'],
+    ['rocket','טיל','🚀'], ['tent','אוהל','⛺'], ['house','בית','🏠'], ['robot','רובוט','🤖'],
+    ['drum','תוף','🥁'], ['guitar','גיטרה','🎸'], ['trumpet','חצוצרה','🎺'], ['scissors','מספריים','✂️'],
+    ['broom','מטאטא','🧹'],
+    ['tooth','שן','🦷'], ['eye','עין','👁️'], ['ear','אוזן','👂'], ['foot','כף רגל','🦶'],
+    ['brain','מוח','🧠'], ['heart','לב','❤️'],
+    ['snow','שלג','❄️'], ['rainbow','קשת בענן','🌈'], ['cloud','ענן','☁️'], ['rose','ורד','🌹'],
+    ['cactus','קקטוס','🌵'], ['tulip','צבעוני','🌷'], ['wave','גל','🌊'], ['mushroom','פטרייה','🍄'],
+    ['snowman','איש שלג','⛄'],
+    ['two','שתיים','2️⃣'], ['three','שלוש','3️⃣'], ['four','ארבע','4️⃣'], ['five','חמש','5️⃣'],
+    ['seven','שבע','7️⃣'],
+  ],
+};
+// exceptions where the spelling rule would teach the wrong sound (null = no tip)
+const MANUAL_TIPS = {
+  two: ['במילה הזו האות ', 'w', ' שקטה'],
+  chef: ['במילה הזו ', 'ch', ' נשמעות כמו ש'],
+  headache: ['במילה הזו ', 'ch', ' נשמעות כמו ק'],
+  pizza: ['במילה הזו ', 'zz', ' נשמעות כמו צ'],
+  soup: ['במילה הזו ', 'ou', ' נשמעות כמו אוּ'],
+  four: ['במילה הזו ', 'ou', ' נשמעות כמו אוֹ'],
+  door: ['במילה הזו ', 'oo', ' נשמעות כמו אוֹ'],
+  koala: null,
+  angel: null,
+};
+// Pronunciation tip from spelling (first pattern that matches)
+function autoTip(w) {
+  if (w in MANUAL_TIPS) return MANUAL_TIPS[w];
+  if (w.startsWith('kn')) return ['האות ', 'k', ' בהתחלה שקטה: לא שומעים אותה'];
+  if (w.endsWith('mb')) return ['האות ', 'b', ' בסוף שקטה: לא שומעים אותה'];
+  const digraphs = [
+    ['sh', 'נשמעות כמו ש'], ['ch', 'נשמעות כמו צ׳'], ['th', 'נשמעות ביחד כשהלשון בין השיניים'],
+    ['ph', 'נשמעות כמו פ'], ['ck', 'נשמעות כמו ק'], ['qu', 'נשמעות כמו קוו'], ['ng', 'נשמעות כמו נג (באף)'],
+    ['ee', 'נשמעות כמו אִי'], ['oo', 'נשמעות כמו אוּ'], ['ai', 'נשמעות כמו אֵיי'], ['oa', 'נשמעות כמו אוֹ'],
+    ['ou', 'נשמעות כמו אַאוּ'],
+  ];
+  for (const [g, t] of digraphs) if (w.includes(g)) return ['האותיות ', g, ' ביחד ' + t];
+  const dbl = w.match(/([b-df-hj-np-tv-z])\1/);
+  if (dbl) return ['שתי אותיות ', dbl[1], ' אבל שומעים צליל אחד'];
+  if (w.length >= 4 && /[aeiou][^aeiou]e$/.test(w)) return T_SILENT_E;
+  return null;
+}
+for (const [lvl, list] of Object.entries(EXTRA_WORDS)) {
+  for (const [w, he, e] of list) {
+    const d = w.length <= 3 ? 1 : w.length === 4 ? 2 : 3;
+    const tip = autoTip(w);
+    WORDS.push(tip ? { L: +lvl, d, w, he, e, tip } : { L: +lvl, d, w, he, e });
+  }
+}
+
 // mirror letters challenge (inside stage 2)
 const MIRROR_WORDS = {
   b: [{ w:'bed', e:'🛏️', he:'מיטה' }, { w:'bag', e:'🎒', he:'תיק' }, { w:'bus', e:'🚌', he:'אוטובוס' }, { w:'bee', e:'🐝', he:'דבורה' }, { w:'ball', e:'⚽', he:'כדור' }, { w:'banana', e:'🍌', he:'בננה' }],
@@ -476,9 +578,10 @@ function nextButton(isLast, onNext, label = 'הבא ←') {
   return h('button', { class: 'btn green wide hidden', onclick: onNext }, isLast ? 'סיום 🏁' : label);
 }
 // slot size that fits long words on narrow phones
-function slotSizeFor(n) {
+const slotGap = n => n > 6 ? 4 : 8;
+function slotSizeFor(n, max = 60) {
   const avail = Math.min(488, ($('main').clientWidth || 358) - 32);
-  return Math.max(38, Math.min(60, Math.floor((avail - (n - 1) * 8) / n)));
+  return Math.max(26, Math.min(max, Math.floor((avail - (n - 1) * slotGap(n)) / n)));
 }
 function sizeSlot(el, s) { el.style.width = s + 'px'; el.style.height = Math.round(s * 1.16) + 'px'; el.style.fontSize = Math.round(s * .72) + 'px'; }
 
@@ -856,7 +959,7 @@ function StageBuild(res) {
 
     const board = h('div', { class: 'build-wrap' },
       h('div', { class: 'slotwrap' },
-        h('div', { class: 'slots' }, slotEls),
+        h('div', { class: 'slots', style: `gap:${slotGap(letters.length)}px` }, slotEls),
         h('div', { class: 'dir-arrow', 'aria-hidden': 'true' }),
         h('div', { class: 'dir-label' }, '👆 מתחילים כאן, משמאל')));
 
@@ -938,7 +1041,7 @@ function StageMissing(res) {
       ...(round === 0 ? [h('div', { class: 'hint blue' }, '💡 באנגלית אין ניקוד. את התנועות כותבים עם האותיות ', en(knownVowels.map(fmt).join(' ')), '.')] : []),
       h('div', { class: 'prompt' }, 'השלם את המילה: ', h('span', { style: 'color:var(--blue)' }, item.he)),
       speakerPic(item.e, sayWord),
-      h('div', { class: 'build-wrap' }, h('div', { class: 'slots static', style: 'direction:ltr' }, slotEls)),
+      h('div', { class: 'build-wrap' }, h('div', { class: 'slots static', style: `direction:ltr;gap:${slotGap(letters.length)}px` }, slotEls)),
       msg, choices, extra, nextBtn);
     enter(choices);
     setTimeout(sayWord, 350);
@@ -1220,7 +1323,11 @@ function WriteWords(res) {
     function playLetter() {
       const app = screen('כותבים מילה');
       const ch = letters[li];
-      const track = h('div', { class: 'word-track' }, letters.map((c, i) => h('span', { class: 'en ' + (i < li ? 'done' : i === li ? 'now' : '') }, c)));
+      const ts = slotSizeFor(letters.length, 46);
+      const track = h('div', { class: 'word-track', style: `gap:${slotGap(letters.length)}px` }, letters.map((c, i) => {
+        const s = h('span', { class: 'en ' + (i < li ? 'done' : i === li ? 'now' : '') }, c);
+        sizeSlot(s, ts); return s;
+      }));
       const msg = h('p', { class: 'sub' }, `אות ${li + 1} מתוך ${letters.length}. מתחילים משמאל →`);
       const nextBtn = nextButton(wi === list.length - 1, () => {
         wi++; if (wi >= list.length) EndScreen('write', earned, () => StageWrite()); else playWord();
