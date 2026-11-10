@@ -240,6 +240,26 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .rtile.done{background:var(--green-soft);box-shadow:0 4px 0 var(--green)}
 .blend{font-size:40px;font-weight:800;text-align:center;color:var(--blue);margin:8px 0 0;min-height:52px}
 .choices.pics .choice{font-size:64px}
+
+/* stage 7: phrases */
+.pic.still{cursor:default}
+.situation{font-size:20px;font-weight:800;text-align:center;line-height:1.4;margin:12px 0 4px}
+.opts{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.opt-row{display:flex;gap:8px;direction:ltr}
+.opt{flex:1;border:0;border-radius:16px;background:var(--card);box-shadow:0 4px 0 var(--line);font-size:20px;font-weight:800;min-height:58px;padding:10px 14px;line-height:1.3}
+.opt.en{font-size:22px}
+.opt.right{background:var(--green-soft);box-shadow:0 4px 0 var(--green)}
+.opt.wrong{background:var(--red-soft);box-shadow:0 4px 0 var(--red);opacity:.55;pointer-events:none}
+.ear{flex:none;width:58px;border:0;border-radius:16px;background:var(--blue-soft);box-shadow:0 4px 0 var(--line);font-size:24px}
+.phrase-line{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;direction:ltr;min-height:64px;margin:12px 0;padding:8px;border:3px dashed #CDBB98;border-radius:16px;background:rgba(255,255,255,.6)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;direction:ltr}
+.chip{border:0;border-radius:14px;background:var(--blue);color:#fff;font-size:22px;padding:8px 14px;box-shadow:0 4px 0 var(--blue-dark);min-height:48px}
+.chip.placed{background:var(--green-soft);color:var(--ink);box-shadow:0 3px 0 var(--green);pointer-events:none}
+.chip.used{visibility:hidden}
+.say-card{text-align:center}
+.say-card .big-en{font-size:28px;display:block;margin-bottom:2px}
+.say-card p{margin:6px 0}
+.mini-ear{border:0;background:#fff;border-radius:10px;padding:2px 8px;margin-inline-start:6px;font-size:18px;box-shadow:0 2px 0 var(--line)}
 </style>
 </head>
 <body>
@@ -940,11 +960,11 @@ function EndScreen(stageKey, earned, again, nextIdx) {
    Home
    ========================================================= */
 const STAGES = [];
-const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה' };
+const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה', talk: 'מדברים' };
 const RESUME_RUN = {
   listen: d => StageListen(d), pairs: d => StagePairs(d), mirror: d => MirrorChallenge(d.earned, d),
   build: d => StageBuild(d), missing: d => StageMissing(d), 'write-letters': d => WriteLetters(d), 'write-words': d => WriteWords(d),
-  read: d => StageRead(d),
+  read: d => StageRead(d), talk: d => StageTalk(d),
 };
 function goalBar() {
   const min = Math.floor(todaySec() / 60), goal = state.goal;
@@ -2041,7 +2061,7 @@ function StageRead(res) {
     const ask = h('div', { class: 'hidden' });
     const extra = h('div');
     const nextBtn = nextButton(round === ROUNDS - 1, () => {
-      round++; if (round >= ROUNDS) EndScreen('read', earned, () => StageRead()); else play();
+      round++; if (round >= ROUNDS) EndScreen('read', earned, () => StageRead(), 6); else play();
     });
 
     const tiles = gs.map((gr, i) => {
@@ -2095,6 +2115,179 @@ function StageRead(res) {
 }
 
 /* =========================================================
+   Stage 7: מדברים (everyday phrases and when to say them)
+   Listening stage, so phrases are not limited to the letters learned.
+   The level sets how hard the language is:
+   1 = manners and greetings, 2 = me, feelings, playing, 3 = questions and requests.
+   he / replyHe can be [boy, girl] when the child is the speaker.
+   when = the situation, written without gender ("כשפוגשים...").
+   grp = phrases that fit the same situation, never shown together as options.
+   ========================================================= */
+const PHRASES = [
+  { L:1, p:'Hello!', he:'שלום!', e:'👋', when:'כשפוגשים מישהו', grp:'hi' },
+  { L:1, p:'Good morning!', he:'בוקר טוב!', e:'🌅', when:'כשנפגשים בבוקר', grp:'hi' },
+  { L:1, p:'Good night!', he:'לילה טוב!', e:'🌙', when:'לפני שהולכים לישון', grp:'bye' },
+  { L:1, p:'Goodbye!', he:'להתראות!', e:'🚶', when:'כשנפרדים ממישהו והולכים', grp:'bye' },
+  { L:1, p:'Thank you!', he:'תודה!', e:'🙏', when:'כשמישהו נותן לנו משהו או עוזר לנו', reply:"You're welcome!", replyHe:'בבקשה, על לא דבר!' },
+  { L:1, p:'Please.', he:'בבקשה.', e:'🥺', when:'כשמבקשים משהו בנימוס' },
+  { L:1, p:'Sorry!', he:'סליחה!', e:'😔', when:'כשעשינו משהו לא בכוונה, למשל נתקלנו במישהו', reply:"It's OK.", replyHe:'זה בסדר.', grp:'sorry' },
+  { L:1, p:'How are you?', he:'מה שלומך?', e:'🙂', when:'כשרוצים לדעת איך מישהו מרגיש', reply:"I'm fine, thank you!", replyHe:'אני בסדר, תודה!', grp:'how' },
+  { L:1, p:"I'm fine, thank you!", he:'אני בסדר, תודה!', e:'👌', when:'כשמישהו שואל מה שלומנו', grp:'how' },
+  { L:1, p:'Yes, please!', he:'כן, בבקשה!', e:'😋', when:'כשמציעים לנו משהו שאנחנו רוצים', grp:'offer' },
+  { L:1, p:'No, thank you.', he:'לא, תודה.', e:'✋', when:'כשמציעים לנו משהו שאנחנו לא רוצים', grp:'offer' },
+  { L:1, p:'Happy birthday!', he:'יום הולדת שמח!', e:'🎂', when:'ביום ההולדת של מישהו', reply:'Thank you!', replyHe:'תודה!' },
+  { L:1, p:'I love you!', he:['אני אוהב אותך!', 'אני אוהבת אותך!'], e:'❤️', when:'כשרוצים להגיד למישהו קרוב שהוא חשוב לנו' },
+
+  { L:2, p:"What's your name?", he:'איך קוראים לך?', e:'🏷️', when:'כשפוגשים ילד חדש ורוצים לדעת את השם שלו', reply:'My name is Dan.', replyHe:'קוראים לי דן.' },
+  { L:2, p:'Nice to meet you!', he:'נעים להכיר!', e:'🤝', when:'כשפוגשים מישהו בפעם הראשונה', reply:'Nice to meet you too!', replyHe:'גם לי נעים להכיר!' },
+  { L:2, p:"I'm hungry.", he:['אני רעב.', 'אני רעבה.'], e:'🍽️', when:'כשרוצים לאכול' },
+  { L:2, p:"I'm thirsty.", he:['אני צמא.', 'אני צמאה.'], e:'🥤', when:'כשרוצים לשתות' },
+  { L:2, p:"I'm tired.", he:['אני עייף.', 'אני עייפה.'], e:'🥱', when:'כשרוצים לנוח או לישון' },
+  { L:2, p:"I'm happy!", he:['אני שמח!', 'אני שמחה!'], e:'😄', when:'כשמרגישים טוב ושמחים', grp:'good' },
+  { L:2, p:"Let's play!", he:'בואו נשחק!', e:'🎲', when:'כשרוצים להזמין חברים לשחק', reply:'Yes!', replyHe:'כן!' },
+  { L:2, p:'I like it!', he:['אני אוהב את זה!', 'אני אוהבת את זה!'], e:'😍', when:'כשמשהו מוצא חן בעינינו', grp:'good' },
+  { L:2, p:"I don't like it.", he:['אני לא אוהב את זה.', 'אני לא אוהבת את זה.'], e:'😖', when:'כשמשהו לא מוצא חן בעינינו' },
+  { L:2, p:'Good job!', he:'כל הכבוד!', e:'👏', when:'כשמישהו הצליח במשהו', reply:'Thank you!', replyHe:'תודה!' },
+  { L:2, p:'Can I help you?', he:'אפשר לעזור לך?', e:'🤲', when:'כשרואים שמישהו צריך עזרה', reply:'Yes, please!', replyHe:'כן, בבקשה!' },
+  { L:2, p:'Wait for me!', he:'חכו לי!', e:'🏃', when:'כשהחברים הולכים מהר ורוצים שיחכו לנו' },
+
+  { L:3, p:'Can I have water, please?', he:'אפשר לקבל מים, בבקשה?', e:'💧', when:'כשצמאים ומבקשים מים בנימוס', reply:'Here you are.', replyHe:'הנה, בבקשה.' },
+  { L:3, p:'Excuse me.', he:'סליחה (כשפונים למישהו)', e:'🙋', when:'כשרוצים לפנות למישהו או לעבור לידו', grp:'sorry' },
+  { L:3, p:'Where is the bathroom?', he:'איפה השירותים?', e:'🚻', when:'כשמחפשים שירותים במקום חדש' },
+  { L:3, p:"I don't understand.", he:['אני לא מבין.', 'אני לא מבינה.'], e:'🤷', when:'כשמישהו אומר משהו ולא הבנו', grp:'again' },
+  { L:3, p:'Can you say it again, please?', he:'אפשר להגיד את זה שוב, בבקשה?', e:'🔁', when:'כשלא שמענו טוב ורוצים לשמוע שוב', grp:'again' },
+  { L:3, p:'What time is it?', he:'מה השעה?', e:'🕒', when:'כשרוצים לדעת מה השעה', reply:"It's three o'clock.", replyHe:'השעה שלוש.' },
+  { L:3, p:'See you tomorrow!', he:'נתראה מחר!', e:'📅', when:'כשנפרדים ממישהו שנפגוש שוב מחר', grp:'bye' },
+  { L:3, p:'How old are you?', he:'מה הגיל שלך?', e:'🎈', when:'כשרוצים לדעת מה הגיל של מישהו', reply:"I'm nine.", replyHe:['אני בן תשע.', 'אני בת תשע.'] },
+  { L:3, p:'I need help.', he:['אני צריך עזרה.', 'אני צריכה עזרה.'], e:'🆘', when:'כשמשהו קשה מדי ורוצים שיעזרו לנו' },
+  { L:3, p:'Can I play with you?', he:'אפשר לשחק איתכם?', e:'🧸', when:'כשרוצים להצטרף למשחק של ילדים אחרים', reply:'Sure!', replyHe:'בטח!' },
+  { L:3, p:"Sorry, I'm late.", he:'סליחה שאיחרתי.', e:'⏰', when:'כשמגיעים אחרי שכולם כבר התחילו', grp:'sorry' },
+  { L:3, p:'Have a nice day!', he:'שיהיה לך יום נעים!', e:'☀️', when:'כשנפרדים ממישהו בבוקר או באמצע היום', grp:'bye' },
+];
+const heOf = x => Array.isArray(x) ? g(x[0], x[1]) : x;
+const phraseWords = p => p.replace(/[.,!?]/g, '').split(' ');
+const findPhrase = s => PHRASES.find(x => x.p === s);
+const sayPhrase = (s, rate = .8) => Speech.en(s, rate);
+// kinds of rounds by level: hear = what did they say (Hebrew options), say = what do we say (English options), order = build the sentence
+const TALK_KINDS = { 1: ['hear', 'say'], 2: ['hear', 'say'], 3: ['hear', 'say', 'order'] };
+
+function StageTalk(res) {
+  let list, kinds, round = 0, earned = 0;
+  if (res && res.list) { list = res.list.map(findPhrase).filter(Boolean); kinds = res.kinds; round = res.round || 0; earned = res.earned || 0; }
+  else {
+    const pool = PHRASES.filter(x => x.L <= state.level);
+    const weak = shuffle(pool.filter(x => Mastery.isWeak('P:' + x.p))).slice(0, 2);
+    const cur = shuffle(PHRASES.filter(x => x.L === state.level && !weak.includes(x)));
+    const prev = shuffle(pool.filter(x => x.L < state.level && !weak.includes(x)));
+    list = [...weak, ...cur.slice(0, 4), ...prev, ...cur.slice(4)].slice(0, 6);
+    const ks = TALK_KINDS[state.level];
+    kinds = list.map((x, i) => {
+      const k = ks[i % ks.length];
+      return k === 'order' && phraseWords(x.p).length < 3 ? 'hear' : k;   // one or two words are too short to order
+    });
+  }
+  const ROUNDS = list.length;
+  const saveAt = r => Resume.save('talk', { list: list.map(x => x.p), kinds, round: r, earned });
+  const ear = (text, cls = 'ear') => h('button', { class: cls, type: 'button', 'aria-label': 'השמע', onclick: e => { e.stopPropagation(); sayPhrase(text); } }, '🔊');
+  // 2 wrong options from the same levels, never from the same situation group
+  const others = item => {
+    const out = [];
+    for (const x of shuffle(PHRASES.filter(x => x.L <= state.level && x !== item))) {
+      if (out.length === 2) break;
+      if (item.grp && x.grp === item.grp) continue;
+      if (out.some(o => heOf(o.he) === heOf(x.he))) continue;
+      out.push(x);
+    }
+    return out;
+  };
+
+  function play() {
+    saveAt(round);
+    const app = screen('מדברים');
+    const item = list[round], kind = kinds[round];
+    let solved = false, firstTry = true, onWin = null;
+    const say = () => sayPhrase(item.p);
+    const msg = h('p', { class: 'sub' });
+    const card = h('div');
+    const nextBtn = nextButton(round === ROUNDS - 1, () => {
+      round++; if (round >= ROUNDS) EndScreen('talk', earned, () => StageTalk()); else play();
+    });
+    function win(el) {
+      solved = true; if (el) { el.classList.add('right'); pop(el); burst(el); }
+      if (onWin) onWin();
+      addStar('talk'); earned++;
+      Mastery.rec('P:' + item.p, firstTry);
+      msg.textContent = 'נכון! 🎉';
+      const reply = item.reply ? h('p', null, '💬 עונים: ', en(item.reply), ear(item.reply, 'mini-ear'), h('br'), heOf(item.replyHe)) : null;
+      const c = h('div', { class: 'hint blue say-card' },
+        h('span', { class: 'big-en en' }, item.p), ear(item.p, 'mini-ear'),
+        h('p', null, h('b', null, heOf(item.he))),
+        h('p', null, '💡 אומרים את זה ', item.when),
+        reply);
+      card.append(c); enter(c);
+      nextBtn.classList.remove('hidden');
+      say();
+      saveAt(round + 1 < ROUNDS ? round + 1 : round);
+      setTimeout(() => nextBtn.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
+    }
+    function miss(el, ...parts) {
+      firstTry = false;
+      if (el) { el.classList.add('wrong'); shake(el); }
+      msg.innerHTML = ''; msg.append(...parts);
+    }
+
+    let body;
+    if (kind === 'hear') {
+      msg.textContent = g('לחץ', 'לחצי') + ' על התמונה כדי לשמוע שוב';
+      const opts = shuffle([item, ...others(item)]);
+      // the picture would give the answer away, so it shows up only after a right answer
+      const pic = speakerPic('👂', say);
+      onWin = () => { $('.emoji', pic).textContent = item.e; pop(pic); };
+      body = [h('div', { class: 'prompt' }, 'מה אמרו באנגלית?'), pic, msg,
+        h('div', { class: 'opts' }, opts.map(o => h('button', { class: 'opt', type: 'button', onclick: e => {
+          if (solved) return;
+          if (o === item) win(e.currentTarget); else { miss(e.currentTarget, 'כמעט! ' + g('הקשב', 'הקשיבי') + ' שוב ' + g('ונסה', 'ונסי') + ' עוד פעם 🙂'); say(); }
+        } }, heOf(o.he))))];
+      setTimeout(say, 350);
+    } else if (kind === 'say') {
+      msg.textContent = g('לחץ', 'לחצי') + ' על 🔊 כדי לשמוע כל תשובה, ואז ' + g('בחר', 'בחרי') + ' את הנכונה.';
+      const opts = shuffle([item, ...others(item)]);
+      body = [h('div', { class: 'pic still' }, h('span', { class: 'emoji' }, item.e)),
+        h('div', { class: 'situation' }, 'מה אומרים ', item.when, '?'), msg,
+        h('div', { class: 'opts' }, opts.map(o => h('div', { class: 'opt-row' },
+          h('button', { class: 'opt en', type: 'button', onclick: e => {
+            if (solved) return;
+            if (o === item) win(e.currentTarget); else miss(e.currentTarget, 'לא בדיוק. ', en(o.p), ` זה "${heOf(o.he)}". ` + g('נסה', 'נסי') + ' שוב 🙂');
+          } }, o.p),
+          ear(o.p))))];
+    } else {
+      const words = phraseWords(item.p);
+      let k = 0;
+      msg.textContent = g('לחץ', 'לחצי') + ' על המילים לפי הסדר, משמאל לימין.';
+      const line = h('div', { class: 'phrase-line' });
+      const chips = h('div', { class: 'chips' }, shuffle(words.map((w, i) => ({ w, i }))).map(({ w }) => {
+        const b = h('button', { class: 'chip en', type: 'button' }, w);
+        b.addEventListener('click', () => {
+          if (solved) return;
+          if (w !== words[k]) { firstTry = false; shake(b); msg.textContent = 'לא המילה הזו. ' + g('הקשב', 'הקשיבי') + ' שוב 🙂'; say(); return; }
+          b.classList.add('used');
+          const placed = h('span', { class: 'chip en placed' }, w); line.append(placed); pop(placed);
+          k++;
+          if (k === words.length) { chips.style.display = 'none'; win(null); }
+        });
+        return b;
+      }));
+      body = [h('div', { class: 'prompt' }, g('סדר', 'סדרי') + ' את המשפט ששומעים'), speakerPic(item.e, say),
+        h('p', { class: 'situation' }, heOf(item.he)), line, chips, msg];
+      setTimeout(say, 350);
+    }
+    app.append(progressDots(ROUNDS, round), ...body, card, nextBtn);
+    enter($('.opts', app) || $('.chips', app));
+  }
+  play();
+}
+
+/* =========================================================
    Stage registry
    ========================================================= */
 STAGES.push(
@@ -2104,6 +2297,7 @@ STAGES.push(
   { key: 'missing', icon: '🔍', name: 'מה חסר?',    desc: 'משלימים את האות שחסרה במילה', run: () => StageMissing() },
   { key: 'write',   icon: '✏️', name: 'כותבים',     desc: 'כותבים אותיות ומילים באצבע', run: () => StageWrite() },
   { key: 'read',    icon: '📖', name: 'קוראים מילה', desc: 'מחברים צלילים וקוראים מילה שלמה', run: () => StageRead() },
+  { key: 'talk',    icon: '💬', name: 'מדברים',     desc: 'ביטויים של כל יום, ומתי אומרים אותם', run: () => StageTalk() },
 );
 
 /* =========================================================
