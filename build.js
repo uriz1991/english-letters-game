@@ -28,3 +28,9 @@ for (const outFile of targets) {
   console.log('built', outFile, Math.round(out.length / 1024) + 'KB');
 }
 fs.writeFileSync(path.join(root, 'docs', '.nojekyll'), '');
+
+// pwa/ -> docs/: install-as-app files (manifest, offline service worker, icons). Used only on the website.
+for (const f of fs.readdirSync(path.join(root, 'pwa'))) {
+  fs.copyFileSync(path.join(root, 'pwa', f), path.join(root, 'docs', f));
+  console.log('copied', f);
+}
