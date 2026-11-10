@@ -669,16 +669,42 @@ function showGoalModal(sticker) {
 /* =========================================================
    Speech (Web Speech API)
    ========================================================= */
+// Voice choice is per device (each phone has different voices), so it lives in RAW, not in the child profile.
+const RATE_MUL = { slow: .85, normal: 1, fast: 1.15 };
 const Speech = {
   ok: 'speechSynthesis' in window,
   voices: [],
+  listeners: [],
   init() {
     if (!this.ok) return;
-    const load = () => { this.voices = speechSynthesis.getVoices() || []; };
+    const load = () => { this.voices = speechSynthesis.getVoices() || []; this.listeners.forEach(f => { try { f(); } catch (e) {} }); };
     load();
     if ('onvoiceschanged' in speechSynthesis) speechSynthesis.onvoiceschanged = load;
+    else speechSynthesis.addEventListener && speechSynthesis.addEventListener('voiceschanged', load);
   },
+  // Higher = clearer. Network voices (Google, Natural) usually sound much better than the small offline ones.
+  score(v) {
+    const n = (v.name || '') + ' ' + (v.voiceURI || ''), lang = (v.lang || '').toLowerCase().replace('_', '-');
+    if (!lang.startsWith('en')) return -1;
+    if (/albert|bad news|bahh|bells|boing|bubbles|cellos|fred|good news|jester|junior|organ|ralph|superstar|trinoids|whisper|wobble|zarvox|kathy|eloquence|espeak|compact/i.test(n)) return 0;
+    let s = lang === 'en-us' ? 40 : lang === 'en-gb' ? 15 : 8;   // the game teaches American pronunciation
+    if (/natural|neural|enhanced|premium|wavenet|studio/i.test(n)) s += 50;
+    if (/google/i.test(n)) s += 20;
+    if (/samantha|ava|allison|aria|jenny|zira|susan|serena|karen|moira/i.test(n)) s += 15;
+    if (/network/i.test(n) || v.localService === false) s += 15;
+    if (v.default) s += 2;
+    return s;
+  },
+  englishVoices() { return this.voices.filter(v => this.score(v) > 0).sort((a, b) => this.score(b) - this.score(a)); },
+  // the parent's choice if it still exists on this phone, else the best one
+  bestEnglish() {
+    const want = RAW.get('voice', null);
+    const list = this.englishVoices();
+    return (want && list.find(v => v.voiceURI === want)) || list[0] || null;
+  },
+  bestLocal() { return this.englishVoices().find(v => v.localService !== false) || null; },
   voiceFor(lang) {
+    if (lang.toLowerCase().startsWith('en')) { const b = this.bestEnglish(); if (b) return b; }
     const want = lang.toLowerCase().replace('_', '-');
     const base = want.slice(0, 2);
     const alt = base === 'he' ? 'iw' : base;
@@ -687,17 +713,24 @@ const Speech = {
     return list.find(v => norm(v) === want && v.localService) || list.find(v => norm(v) === want)
         || list.find(v => norm(v).startsWith(base) || norm(v).startsWith(alt)) || null;
   },
-  say(text, lang = 'en-US', rate = 0.8) {
+  say(text, lang = 'en-US', rate = 0.8, forceVoice) {
     return new Promise(resolve => {
       if (!this.ok || !text) return resolve();
       try {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
-        u.lang = lang; u.rate = rate; u.pitch = 1.05;
-        const v = this.voiceFor(lang); if (v) u.voice = v;
+        u.lang = lang; u.rate = Math.min(1.3, rate * (RATE_MUL[RAW.get('rate', 'normal')] || 1)); u.pitch = 1;
+        const v = forceVoice || this.voiceFor(lang); if (v) { u.voice = v; u.lang = v.lang; }
         let done = false; const fin = () => { if (!done) { done = true; resolve(); } };
-        u.onend = fin; u.onerror = fin;
-        setTimeout(fin, 600 + text.length * 160);
+        u.onend = fin;
+        // an internet voice fails when the phone is offline: say it again with a voice that lives on the phone
+        u.onerror = e => {
+          const local = this.bestLocal();
+          if (!forceVoice && v && v.localService === false && local && local !== v && e && e.error !== 'interrupted' && e.error !== 'canceled') {
+            done = true; this.say(text, lang, rate, local).then(resolve);
+          } else fin();
+        };
+        setTimeout(fin, 900 + text.length * 180);
         speechSynthesis.speak(u);
       } catch (e) { resolve(); }
     });
@@ -897,6 +930,7 @@ function Home() {
     h('p', null, 'כשמגיעים ליעד היומי מקבלים מדבקה לאלבום, ויום אחרי יום נבנה רצף 🔥. סופרים רק זמן שבו באמת נוגעים במסך.'),
     h('p', null, 'רמה 1: ', en('A–H'), '. רמה 2: ', en('I–P'), '. רמה 3: ', en('Q–Z'), '. המילים בכל רמה בנויות רק מאותיות שכבר נלמדו.'),
     h('p', null, 'ההתקדמות נשמרת רק בטלפון הזה ובדפדפן הזה, לכל ילד בנפרד. שום מידע לא נשלח לאינטרנט. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
+    voiceSettings(),
     installHelp(),
     h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
     h('button', { class: 'reset-btn', onclick: resetAll }, `איפוס ההתקדמות של ${p.name}`));
@@ -911,6 +945,37 @@ function resetAll() {
   for (const k of PROFILE_KEYS) store.del(k);
   loadProfile(PID);
   renderStars(); Home();
+}
+
+/* =========================================================
+   Voice settings (parents): pick the clearest English voice on this phone + speed
+   ========================================================= */
+function voiceSettings() {
+  const box = h('div', { class: 'card', style: 'margin:12px 0' });
+  if (!Speech.ok) { box.append(h('p', { style: 'margin:0' }, '🔊 הדפדפן הזה לא תומך בהקראה.')); return box; }
+  const sel = h('select', { class: 'text-in', style: 'font-size:16px;direction:ltr;text-align:left', 'aria-label': 'קול ההקראה' });
+  const note = h('p', { style: 'margin:6px 0 0;font-size:13px' });
+  const fill = () => {
+    const list = Speech.englishVoices();
+    const cur = Speech.bestEnglish();
+    sel.innerHTML = '';
+    if (!list.length) { sel.append(h('option', null, '...')); note.textContent = 'לא נמצאו קולות באנגלית בטלפון. אפשר להתקין בהגדרות הטלפון: שפה וקלט ← המרת טקסט לדיבור.'; return; }
+    list.forEach((v, i) => sel.append(h('option', { value: v.voiceURI, selected: v === cur }, `${i === 0 ? '⭐ ' : ''}${v.name} (${v.lang})${v.localService === false ? ' 🌐' : ''}`)));
+    note.textContent = '⭐ = הקול שנראה הכי ברור. 🌐 = קול איכותי שעובד עם אינטרנט; בלי אינטרנט המשחק עובר לבד לקול שבטלפון.';
+  };
+  fill();
+  Speech.listeners = [fill];
+  sel.addEventListener('change', () => { RAW.set('voice', sel.value); Speech.en('Apple. Ball. Cat.', .8); });
+  const rate = RAW.get('rate', 'normal');
+  const seg = h('div', { class: 'seg', style: 'margin-top:8px' }, [['slow', '🐢 לאט'], ['normal', 'רגיל'], ['fast', '🐇 מהר']].map(([k, t]) => {
+    const b = h('button', { type: 'button', class: k === rate ? 'on' : '' }, t);
+    b.addEventListener('click', () => { RAW.set('rate', k); [...seg.children].forEach(x => x.classList.toggle('on', x === b)); Speech.en('Apple. Ball. Cat.', .8); });
+    return b;
+  }));
+  box.append(h('b', null, '🔊 קול ההקראה'), h('div', { style: 'margin-top:8px' }, sel), seg,
+    h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn small', type: 'button', onclick: () => Speech.en('Hello! Apple. Ball. Cat. Great job!', .8) }, '▶ נסה את הקול')),
+    note);
+  return box;
 }
 
 /* =========================================================
