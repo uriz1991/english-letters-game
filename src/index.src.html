@@ -53,6 +53,18 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 .pts-track i{position:absolute;inset:0 0 0 auto;border-radius:99px;background:linear-gradient(90deg,#3ac569,#2f80ed)}
 .pts-track b{position:absolute;top:-5px;width:3px;height:24px;background:var(--ink);border-radius:2px}
 .sticker-won{font-size:72px;margin:6px 0}
+.free-note{margin:16px 2px 6px;font-size:14px;line-height:1.45}.free-note b{display:block;font-size:17px;margin-bottom:2px}
+.board{display:flex;flex-direction:column;gap:8px;margin:10px 0 16px}
+.board-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:var(--card,#fff);border:2px solid var(--line,#eee4d4)}
+.board-row.me{border-color:#f5a623;box-shadow:0 0 0 3px rgba(245,166,35,.25)}
+.board-row .rank{font-size:24px;width:30px;text-align:center;font-weight:800}.board-row .av{font-size:30px}
+.board-row .nm{flex:1}.board-row .nm b{display:block}.board-row .nm small{opacity:.75}
+.board-row .pts{font-weight:800;color:#e09412;white-space:nowrap}
+.kids-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.kid-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line,#eee4d4)}
+.kid-row:last-child{border-bottom:0}
+.kid-row .av{font-size:28px}.kid-row .nm{flex:1;font-weight:700}.kid-row .nm small{font-weight:400;opacity:.7}
+.who.editing .who-card{outline:2px dashed #2f80ed;outline-offset:-4px}
 .login-card{margin-top:14px}
 .login-card p{margin:8px 0 14px}
 .login-card .google-btn{justify-content:center;font-size:19px}
@@ -638,7 +650,7 @@ const store = {
   set(k, v) { RAW.set(`p${PID}_${k}`, v); onKidChange(PID); },
   del(k) { RAW.del(`p${PID}_${k}`); onKidChange(PID); },
 };
-const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map'];
+const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits'];
 
 const state = {
   stars: 0, stageStars: {}, done: {}, caseMode: 'upper', level: 1,
@@ -918,7 +930,15 @@ function enter(el) { if (G && el) G.from(el, { y: 14, opacity: 0, duration: .35,
    Stars, toast, break reminder
    ========================================================= */
 function renderStars() { $('#starCount').textContent = state.stars; }
+// The map is where the real work is. Free practice from the menu still pays, but much less: 1 star per 5 right answers.
+const FREE_RATE = 5;
 function addStar(stageKey, n = 1) {
+  if (!Run || Run.replay) {   // replaying a station that was already passed counts like free practice
+    const bits = store.get('freeBits', 0) + n;
+    store.set('freeBits', bits % FREE_RATE);
+    n = Math.floor(bits / FREE_RATE);
+    if (!n) return;
+  }
   state.stars += n;
   state.stageStars[lk(stageKey)] = (state.stageStars[lk(stageKey)] || 0) + n;
   store.set('stars', state.stars); store.set('stageStars', state.stageStars);
@@ -1137,7 +1157,8 @@ function EndScreen(stageKey, earned, again, nextIdx) {
   const box = h('div', { class: 'end' },
     h('div', { class: 'big' }, '🏆'),
     h('h2', null, g('סיימת את הסבב!', 'סיימת את הסבב!')),
-    h('p', { class: 'sub' }, `קיבלת ${earned} כוכבים ⭐ (סך הכול ${state.stars})`),
+    h('p', { class: 'sub' }, `${earned} תשובות נכונות. סך הכול ${state.stars} כוכבים ⭐`),
+    h('p', { class: 'hint blue' }, '🗺️ כוכבים מלאים ובונוסים מקבלים במפה.'),
     stageKey === 'review' && !Mastery.weakLetters().length && !Mastery.weakWords().length
       ? h('p', { class: 'hint green' }, '💪 תרגלת את כל מה שהיה קשה. אין יותר מה לחזור עליו כרגע!') : null,
     h('div', { class: 'row' },
@@ -1180,7 +1201,8 @@ function Home() {
     h('span', { class: 'av' }, p.avatar),
     h('span', { class: 'mid' }, h('b', null, `שלום, ${p.name}!`), ...goalBar()),
     h('span', { class: 'fire' }, h('em', null, n ? '🔥' : '📒'), n ? `${n} ימים` : 'האזור שלי'));
-  const hello = h('p', { class: 'sub' }, g('בחר רמה ושלב. כדאי לשחק לפי הסדר.', 'בחרי רמה ושלב. כדאי לשחק לפי הסדר.'));
+  const hello = h('div', { class: 'free-note' }, h('b', null, '🎯 תרגול חופשי'),
+    h('span', null, `העבודה העיקרית היא במפה. כאן אפשר לתרגל כל שלב, ומקבלים כוכב אחד על כל ${FREE_RATE} תשובות נכונות.`));
 
   const levels = h('div', { class: 'levels', role: 'group', 'aria-label': 'רמה' }, LEVELS.map(l => {
     const doneCount = STAGES.filter(s => state.done[`${l.n}:${s.key}`]).length;
@@ -1234,6 +1256,7 @@ function Home() {
     h('p', null, 'כשמגיעים ליעד היומי מקבלים מדבקה לאלבום, ויום אחרי יום נבנה רצף 🔥. סופרים רק זמן שבו באמת נוגעים במסך.'),
     h('p', null, 'רמה 1: ', en('A–H'), '. רמה 2: ', en('I–P'), '. רמה 3: ', en('Q–Z'), '. המילים בכל רמה בנויות רק מאותיות שכבר נלמדו.'),
     h('p', null, 'לכל ילד יש התקדמות משלו. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
+    kidsBox(),
     accountBox(),
     timerSettings(),
     voiceSettings(),
@@ -1637,21 +1660,39 @@ function installHelp() {
 /* =========================================================
    Who is playing? (child profiles)
    ========================================================= */
-function ProfilePicker() {
+function ProfilePicker(editing) {
   const list = Profiles.list();
   if (!list.length) return ProfileForm();
-  const app = screen('מי משחק?', !!PID);
-  app.append(h('div', { class: 'home-hello' }, h('h1', null, 'מי משחק עכשיו? 👋')),
-    h('div', { class: 'who' },
-      list.map(p => h('button', { class: 'who-card', onclick: () => { loadProfile(p.id); renderStars(); Home(); } },
+  const app = screen(editing ? 'עריכת ילדים' : 'מי משחק?', !!PID || !!editing);
+  app.append(h('div', { class: 'home-hello' }, h('h1', null, editing ? 'על מי לערוך? ✏️' : 'מי משחק עכשיו? 👋')),
+    h('div', { class: 'who' + (editing ? ' editing' : '') },
+      list.map(p => h('button', { class: 'who-card', onclick: () => {
+        if (editing) return ProfileForm(p.id, () => ProfilePicker(true));
+        loadProfile(p.id); renderStars(); Home();
+      } },
         h('span', { class: 'av' }, p.avatar), h('span', { class: 'nm' }, p.name),
-        h('small', null, `⭐ ${RAW.get(`p${p.id}_stars`, 0)}`))),
-      h('button', { class: 'who-card add', onclick: () => ProfileForm() }, h('span', { class: 'av' }, '➕'), 'ילד חדש')),
+        h('small', null, editing ? '✏️ עריכה' : `⭐ ${RAW.get(`p${p.id}_stars`, 0)}`))),
+      editing ? null : h('button', { class: 'who-card add', onclick: () => ProfileForm() }, h('span', { class: 'av' }, '➕'), 'ילד חדש')),
+    h('div', { class: 'row', style: 'margin-top:14px' }, editing
+      ? h('button', { class: 'btn green', onclick: () => ProfilePicker() }, 'סיום ✓')
+      : h('button', { class: 'btn secondary small', onclick: () => ProfilePicker(true) }, '✏️ עריכת שמות ודמויות')),
     h('p', { class: 'sub', style: 'margin-top:16px' }, 'לכל ילד יש התקדמות, כוכבים ומדבקות משלו. ',
       Sync.on() ? 'הכול נשמר בחשבון של ההורה.' : 'הכול נשמר רק בטלפון הזה.'));
   enter($('.who', app));
 }
-function ProfileForm(id) {
+// parents area: every child with an edit button
+function kidsBox() {
+  return h('div', { class: 'card', id: 'kidsBox', style: 'margin:12px 0' },
+    h('b', null, '👥 הילדים'),
+    h('div', { class: 'kids-list' }, Profiles.list().map(p => h('div', { class: 'kid-row' },
+      h('span', { class: 'av' }, p.avatar), h('span', { class: 'nm' }, p.name, p.id === PID ? h('small', null, ' (משחק/ת עכשיו)') : ''),
+      h('button', { class: 'btn secondary small', onclick: () => ProfileForm(p.id, () => reopenParents('kidsBox')) }, '✏️ עריכה')))),
+    h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:8px' },
+      h('button', { class: 'btn small', onclick: () => ProfileForm() }, '➕ ילד חדש'),
+      h('button', { class: 'btn secondary small', onclick: () => LeaderBoard() }, '🏆 טבלת האלופים')));
+}
+// back: where to return after editing (from the parents area it goes back there, without switching child)
+function ProfileForm(id, back) {
   const old = id ? Profiles.get(id) : null;
   const app = screen(old ? 'עריכת פרופיל' : 'ילד חדש', Profiles.list().length > 0);
   let avatar = old ? old.avatar : AVATARS[0], gender = old ? old.g : 'm';
@@ -1673,6 +1714,8 @@ function ProfileForm(id) {
     let pid = id;
     if (old) Profiles.update(id, { name: nm, avatar, g: gender });
     else pid = Profiles.add({ name: nm, avatar, g: gender });
+    if (old) toast(`✅ נשמר: ${nm}`);
+    if (old && back) return back();
     loadProfile(pid); renderStars(); Home();
   };
   name.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
@@ -1685,7 +1728,11 @@ function ProfileForm(id) {
     h('div', { class: 'row' }, h('button', { class: 'btn green wide', onclick: save }, old ? 'שמירה' : 'יאללה, מתחילים! ←')),
     old ? h('div', { class: 'row' }, h('button', { class: 'reset-btn', onclick: () => {
       if (!confirm(`למחוק את ${old.name} וכל ההתקדמות שלו/שלה?`)) return;
-      Profiles.remove(id); PID = null; renderStars(); ProfilePicker();
+      Profiles.remove(id);
+      if (id === PID) PID = null;
+      renderStars();
+      if (back) return back();
+      ProfilePicker();
     } }, `מחיקת הפרופיל של ${old.name}`)) : null].filter(Boolean));
 }
 
@@ -2946,7 +2993,7 @@ function startStation(i) {
   if (i > m.at || !canPlay()) return;
   const s = stationAt(i);
   if (s.kind === 'chest') return openChest(i);
-  Run = { ...s, points: 0, max: 0 };
+  Run = { ...s, points: 0, max: 0, replay: i < m.at };
   if (s.dyn) {
     // endless practice: whatever was hard lately, otherwise a few random letters
     const weak = ALL_ABC.filter(L => Mastery.isWeak('L:' + L));
@@ -2964,7 +3011,11 @@ function StationEnd() {
   const m = mapState(); let moved = false;
   if (pass) {
     if ((m.best[r.i] || 0) < stars) m.best[r.i] = stars;
-    if (r.i === m.at) { m.at++; moved = true; }
+    if (r.i === m.at) {
+      m.at++; moved = true;
+      // bonus for opening a new station: 5 stars per map star (only the first time, so replays add nothing extra)
+      state.stars += stars * 5; store.set('stars', state.stars); renderStars();
+    }
     saveMap(m);
   }
   const app = screen(pass ? 'עברת!' : 'עוד קצת');
@@ -2974,6 +3025,7 @@ function StationEnd() {
     h('h2', null, pass ? (moved ? 'עברת את התחנה! תחנה חדשה נפתחה 🎉' : 'עברת את התחנה!') : 'עוד קצת וזה שלך!'),
     h('div', { class: 'map-stars' }, [1, 2, 3].map(n => h('span', { class: n <= stars ? 'on' : '' }, '★'))),
     h('p', { class: 'sub' }, `${r.points} נקודות מתוך ${r.max}. כדי לעבור צריך ${target}.`),
+    moved ? h('p', { class: 'hint green' }, `🎉 בונוס על תחנה חדשה: ${stars * 5} כוכבים ⭐`) : null,
     bar,
     pass ? null : h('p', { class: 'hint' }, 'נקודות מקבלים על תשובה נכונה בניסיון הראשון. ניחוש לא נותן נקודות, אז כדאי לעצור ולחשוב לפני שלוחצים 🦉'),
     h('div', { class: 'row' },
@@ -2998,12 +3050,48 @@ function openChest(i) {
     h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה'))));
   if (got) burst(chest, 30);
 }
+/* Leaderboard of the children on this account: who got furthest on the map. Can be sent to friends in WhatsApp. */
+function kidBoard() {
+  return Profiles.list().map(p => {
+    const m = RAW.get(`p${p.id}_map`, null) || { at: 0, best: {} };
+    const days = new Set(RAW.get(`p${p.id}_goalDays`, []));
+    const d = new Date(); if (!days.has(dayKey(d))) d.setDate(d.getDate() - 1);
+    let fire = 0; while (days.has(dayKey(d))) { fire++; d.setDate(d.getDate() - 1); }
+    return { ...p, at: m.at, mstars: mapStars(m), fire };
+  }).sort((a, b) => b.at - a.at || b.mstars - a.mstars);
+}
+const MEDAL = ['🥇', '🥈', '🥉'];
+function boardText(rows) {
+  return ['🏆 טבלת האלופים – אותיות באנגלית', '',
+    ...rows.map((r, i) => `${MEDAL[i] || `${i + 1}.`} ${r.avatar} ${r.name}: תחנה ${r.at + 1} · ⭐ ${r.mstars}${r.fire ? ` · 🔥 ${r.fire} ימים` : ''}`),
+    '', 'מי מגיע הכי רחוק במפה? בואו לשחק איתנו 👇', SITE].join('\n');
+}
+function LeaderBoard() {
+  endRun();
+  const rows = kidBoard();
+  const app = screen('טבלת האלופים');
+  app.append(h('div', { class: 'home-hello' }, h('h1', null, '🏆 טבלת האלופים'), h('p', { class: 'sub' }, 'מי הגיע הכי רחוק במפה?')),
+    h('div', { class: 'board' }, rows.map((r, i) => h('div', { class: 'board-row' + (r.id === PID ? ' me' : '') },
+      h('span', { class: 'rank' }, MEDAL[i] || `${i + 1}`), h('span', { class: 'av' }, r.avatar),
+      h('span', { class: 'nm' }, h('b', null, r.name), h('small', null, `תחנה ${r.at + 1}` + (r.fire ? ` · 🔥 ${r.fire} ימים` : ''))),
+      h('span', { class: 'pts' }, `⭐ ${r.mstars}`)))),
+    h('div', { class: 'row' }, h('button', { class: 'btn green wide', onclick: () => {
+      const text = boardText(rows);
+      if (navigator.share) navigator.share({ text }).catch(() => {});
+      else window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+    } }, '📤 לשלוח לחברים')),
+    h('p', { class: 'sub', style: 'margin-top:10px;font-size:13px' }, 'נשלחים רק הכינוי, הדמות, מספר התחנה והכוכבים במפה.'),
+    h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה')));
+  enter($('.board', app));
+}
+
 // step 1: the map as a simple list (the drawn map comes next)
 function MapScreen() {
   endRun();
   const m = mapState();
   const app = screen('המפה');
-  app.append(h('div', { class: 'map-head' }, h('b', null, `⭐ ${mapStars(m)} כוכבים במפה`), h('span', null, `תחנה ${m.at + 1}`)));
+  app.append(h('div', { class: 'map-head' }, h('b', null, `⭐ ${mapStars(m)} כוכבים במפה`),
+    h('button', { class: 'btn small', onclick: () => LeaderBoard() }, '🏆 טבלה'), h('span', null, `תחנה ${m.at + 1}`)));
   const list = h('div', { class: 'map-list' });
   let phase = 0;
   for (let i = 0; i <= m.at + 5; i++) {
