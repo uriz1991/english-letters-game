@@ -38,6 +38,21 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 .google-btn .g-logo{font-family:Arial,sans-serif;font-weight:900;font-size:19px;background:conic-gradient(from -45deg,#ea4335 0 25%,#4285f4 0 50%,#34a853 0 75%,#fbbc05 0);-webkit-background-clip:text;background-clip:text;color:transparent}
 .acct-err{color:var(--red);font-weight:700}
 .acct-err:empty{display:none}
+.map-go{display:flex;align-items:center;gap:12px;width:100%;margin:12px 0 4px;padding:14px 16px;border:0;border-radius:20px;background:linear-gradient(135deg,#2f80ed,#7b61ff);color:#fff;text-align:start;box-shadow:0 5px 0 #1d5bb8;font:inherit}
+.map-go .ic{font-size:34px}.map-go b{display:block;font-size:21px}.map-go span span{font-size:14px;opacity:.95}
+.map-head{display:flex;justify-content:space-between;align-items:center;margin:4px 2px 10px;font-size:17px}
+.map-list{display:flex;flex-direction:column;gap:8px}
+.map-phase{margin:14px 2px 2px;font-weight:800;color:var(--ink)}
+.map-st{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;border:2px solid var(--line,#e6dccb);background:var(--card,#fff);text-align:start;font:inherit;color:inherit}
+.map-st .ic{font-size:26px;width:34px;text-align:center}.map-st .txt{flex:1}.map-st small{display:block;opacity:.75}
+.map-st .got{color:#f5a623;font-weight:800;white-space:nowrap}
+.map-st.now{border-color:#2f80ed;box-shadow:0 0 0 3px rgba(47,128,237,.25)}.map-st.now .got{color:#2f80ed}
+.map-st.locked{opacity:.5}.map-st.quiz:not(.locked){border-style:dashed}
+.map-stars{font-size:40px;letter-spacing:6px;color:#d8d0c2}.map-stars .on{color:#f5a623}
+.pts-track{position:relative;height:14px;border-radius:99px;background:#eee4d4;margin:6px auto 12px;max-width:320px;overflow:visible}
+.pts-track i{position:absolute;inset:0 0 0 auto;border-radius:99px;background:linear-gradient(90deg,#3ac569,#2f80ed)}
+.pts-track b{position:absolute;top:-5px;width:3px;height:24px;background:var(--ink);border-radius:2px}
+.sticker-won{font-size:72px;margin:6px 0}
 .login-card{margin-top:14px}
 .login-card p{margin:8px 0 14px}
 .login-card .google-btn{justify-content:center;font-size:19px}
@@ -615,6 +630,7 @@ const RAW = {
   del(k) { try { localStorage.removeItem('abcAH_' + k); } catch (e) { delete MEM[k]; } },
 };
 let PID = null;
+let Run = null;   // the map station being played right now (null = free play from the menu)
 // set by Sync (parent account): every change to a child is also sent to the account
 let onKidChange = () => {}, onKidRemoved = () => {};
 const store = {
@@ -622,7 +638,7 @@ const store = {
   set(k, v) { RAW.set(`p${PID}_${k}`, v); onKidChange(PID); },
   del(k) { RAW.del(`p${PID}_${k}`); onKidChange(PID); },
 };
-const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess'];
+const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map'];
 
 const state = {
   stars: 0, stageStars: {}, done: {}, caseMode: 'upper', level: 1,
@@ -672,12 +688,27 @@ function loadProfile(id) {
 }
 const fmt = s => state.caseMode === 'upper' ? s.toUpperCase() : s.toLowerCase();
 const curLevel = () => LEVELS[state.level - 1];
-const newLetters = () => LETTERS.filter(x => x.lvl === state.level);
-const knownABC = () => LETTERS.filter(x => x.lvl <= state.level).map(x => x.L);
+// on the map, a station decides which letters and words are in play
+const newLetters = () => Run ? LETTERS.filter(x => Run.letters.includes(x.L)) : LETTERS.filter(x => x.lvl === state.level);
+const knownABC = () => Run ? Run.known : LETTERS.filter(x => x.lvl <= state.level).map(x => x.L);
 const findLetter = L => LETTERS.find(x => x.L === L.toUpperCase());
-const levelWords = d => WORDS.filter(w => w.L === state.level && (d == null || w.d === d));
+const levelWords = d => Run ? fitWords(Run).filter(w => d == null || w.d === d) : WORDS.filter(w => w.L === state.level && (d == null || w.d === d));
 const findWord = s => WORDS.find(w => w.w === s && w.L === state.level) || WORDS.find(w => w.w === s);
+// words made only of letters the child already met on the map (+ only one word level, if the station says so)
+function fitWords(st) {
+  const set = new Set(st.known.map(x => x.toLowerCase())), seen = new Set();
+  return WORDS.filter(w => (!st.wl || w.L === st.wl) && [...w.w.toLowerCase()].every(c => !/[a-z]/.test(c) || set.has(c))
+    && !seen.has(w.w) && seen.add(w.w));
+}
+function runWords(n) {
+  // words with the station's new letters first, words that were hard before always come back
+  const all = fitWords(Run), has = w => Run.letters.some(L => w.w.toLowerCase().includes(L.toLowerCase()));
+  const weak = shuffle(all.filter(w => Mastery.isWeak('W:' + w.w))).slice(0, 2);
+  const rest = all.filter(w => !weak.includes(w));
+  return [...weak, ...shuffle(rest.filter(has)), ...shuffle(rest.filter(w => !has(w)))].slice(0, n);
+}
 function sessionWords() {
+  if (Run) return runWords(Run.rounds);
   // up to 2 words that were hard before come back in every session
   const weak = shuffle(levelWords().filter(w => Mastery.isWeak('W:' + w.w))).slice(0, 2);
   const base = [...shuffle(levelWords(1)).slice(0, 4), ...shuffle(levelWords(2)).slice(0, 3), ...shuffle(levelWords(3)).slice(0, 1)]
@@ -694,7 +725,7 @@ function stageStarsFor(level, key) {
    Resume: remembers the exact screen, so the child can continue
    ========================================================= */
 const Resume = {
-  save(stage, data) { store.set('resume', { level: state.level, caseMode: state.caseMode, stage, data, at: Date.now() }); },
+  save(stage, data) { store.set('resume', { level: state.level, caseMode: state.caseMode, stage, data, run: Run || undefined, at: Date.now() }); },
   clear() { store.del('resume'); },
   get() { return store.get('resume', null); },
 };
@@ -907,6 +938,7 @@ const Guard = {
   miss() { this.misses++; },
   // returns how many stars were given (0 or 1). limit = wrong tries that make a round "guessed"
   star(stageKey, limit = 2) {
+    runAdd(this.misses);
     if (this.misses < limit) { this.streak = 0; addStar(stageKey); return 1; }
     this.streak++; this.guessed++;
     const k = dayKey();
@@ -1095,6 +1127,7 @@ function slotSizeFor(n, max = 60) {
 function sizeSlot(el, s) { el.style.width = s + 'px'; el.style.height = Math.round(s * 1.16) + 'px'; el.style.fontSize = Math.round(s * .72) + 'px'; }
 
 function EndScreen(stageKey, earned, again, nextIdx) {
+  if (Run) return StationEnd();   // a map station has its own result screen
   state.done[lk(stageKey)] = true; store.set('done', state.done);
   Resume.clear();
   Guard.reset();
@@ -1137,6 +1170,7 @@ function goalBar() {
 function Home() {
   if (Cloud.possible() && !Cloud.known()) return LoginScreen();
   if (!PID) return ProfilePicker();
+  endRun();
   Guard.reset();
   const app = screen('אותיות באנגלית', false);
   const lv = curLevel();
@@ -1157,13 +1191,14 @@ function Home() {
   const r = Resume.get();
   const resumeBtn = r && RESUME_RUN[r.stage] ? h('button', { class: 'resume', onclick: () => {
     if (!canPlay()) return;
-    state.level = r.level; store.set('level', r.level);
+    if (r.run) { Run = r.run; state.level = r.level; }   // back into the map station
+    else { state.level = r.level; store.set('level', r.level); }
     if (r.caseMode) { state.caseMode = r.caseMode; store.set('case', r.caseMode); }
     RESUME_RUN[r.stage](r.data);
   } },
     h('span', { class: 'ic' }, '▶️'),
     h('span', null, h('b', null, g('להמשיך מאיפה שעצרת', 'להמשיך מאיפה שעצרת')),
-      h('span', null, `רמה ${r.level} · ${r.data && r.data.review ? 'חזרה' : RESUME_NAMES[r.stage]}` + (r.data && r.data.round != null ? ` · סבב ${r.data.round + 1}` : '')))) : null;
+      h('span', null, (r.run ? `🗺️ תחנה ${r.run.i + 1} · ${stationTitle(r.run)}` : `רמה ${r.level} · ${r.data && r.data.review ? 'חזרה' : RESUME_NAMES[r.stage]}`) + (r.data && r.data.round != null ? ` · סבב ${r.data.round + 1}` : '')))) : null;
 
   const toggle = h('div', { class: 'case-toggle', role: 'group', 'aria-label': 'סוג אותיות' },
     h('button', { class: state.caseMode === 'upper' ? 'on' : '', onclick: () => setCase('upper') }, 'אותיות גדולות ', en('ABC')),
@@ -1207,7 +1242,11 @@ function Home() {
     h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
     h('button', { class: 'reset-btn', onclick: resetAll }, `איפוס ההתקדמות של ${p.name}`));
 
-  app.append(meBar, hello, levels, ...(resumeBtn ? [resumeBtn] : []), toggle, letters, ...(review ? [review] : []), list, parents);
+  const mm = mapState(), ms = stationAt(mm.at);
+  const mapBtn = h('button', { class: 'map-go', onclick: () => MapScreen() },
+    h('span', { class: 'ic' }, '🗺️'),
+    h('span', null, h('b', null, 'המפה'), h('span', null, `תחנה ${mm.at + 1}: ${stationTitle(ms)} · ⭐ ${mapStars(mm)}`)));
+  app.append(meBar, mapBtn, hello, levels, ...(resumeBtn ? [resumeBtn] : []), toggle, letters, ...(review ? [review] : []), list, parents);
   enter(list);
 }
 function setCase(m) { state.caseMode = m; store.set('case', m); Home(); }
@@ -1777,7 +1816,13 @@ function StageListen(res) {
   const pool = rv ? LETTERS.filter(x => x.lvl <= state.level) : newLetters();
   let order, round = 0, earned = 0;
   if (res && res.order) { order = res.order; round = res.round || 0; earned = res.earned || 0; }
-  else {
+  else if (Run) {
+    // map station: most rounds on the station's letters, a few on letters met before (so they are not forgotten)
+    const old = shuffle(LETTERS.filter(x => Run.known.includes(x.L) && !Run.letters.includes(x.L)));
+    const oldN = old.length ? Math.min(old.length, Math.round(Run.rounds / 4)) : 0;
+    const main = Array.from({ length: Run.rounds - oldN }, (_, i) => pool[i % pool.length]);
+    order = shuffle([...main, ...old.slice(0, oldN)]).map(x => [x.L, Math.floor(Math.random() * x.kws.length)]);
+  } else {
     // the 2 extra rounds go to letters that were hard before, if there are any
     const weak = shuffle(newLetters().filter(x => Mastery.isWeak('L:' + x.L)));
     const extra = [...weak, ...shuffle(pool)].slice(0, 2);
@@ -1794,7 +1839,9 @@ function StageListen(res) {
     const atEnd = !!kw.end;
     const lower = round >= Math.floor(ROUNDS / 2);
     const show = L => lower ? L.toLowerCase() : L;
-    const others = shuffle(pool.map(x => x.L).filter(x => x !== item.L)).slice(0, 2);
+    // on the map the number of answers grows with the child's knowledge
+    const others = Run ? shuffle(Run.known.filter(x => x !== item.L)).slice(0, Run.opts - 1)
+      : shuffle(pool.map(x => x.L).filter(x => x !== item.L)).slice(0, 2);
     const options = shuffle([item.L, ...others]);
     let solved = false, firstTry = true; Guard.start();
     const sayWord = () => Speech.en(kw.w, .7);
@@ -1885,7 +1932,7 @@ function StagePairs(res) {
         const kw = x.c.l.kws[0];
         setTimeout(() => {
           for (const it of [x, y]) { it.b.classList.add('match'); it.b.append(h('small', null, kw.e)); pop(it.b); }
-          burst(y.b, 8); addStar('pairs'); earned++; save();
+          burst(y.b, 8); addStar('pairs'); earned++; runAdd(0); save();
           Speech.en(`${x.c.l.L.toLowerCase()}, ${kw.w}`, .75);
           if (matched.size === N) setTimeout(done, 900);
         }, 260);
@@ -1900,6 +1947,7 @@ function StagePairs(res) {
 
   const doneBox = h('div', { class: 'hidden' });
   function done() {
+    if (Run) return EndScreen('pairs', earned);   // on the map, mirror letters are a station of their own
     const set = curLevel().mirror;
     Resume.save('mirror', { earned });
     doneBox.className = 'card';
@@ -2389,7 +2437,7 @@ function StageWrite() {
 }
 
 function WriteLetters(res) {
-  const order = curLevel().letters.split('').map(fmt);
+  const order = (Run ? Run.letters.join('') : curLevel().letters).split('').map(fmt);
   let idx = 0, earned = 0;
   if (res && res.idx != null) { idx = res.idx; earned = res.earned; }
   function play() {
@@ -2405,7 +2453,7 @@ function WriteLetters(res) {
     const tr = makeTracer(ch, {
       onMsg: t => { msg.textContent = t; },
       onSuccess: c => {
-        addStar('write'); earned++; burst(c, 16); pop(c);
+        addStar('write'); earned++; runAdd(0); burst(c, 16); pop(c);
         msg.innerHTML = ''; msg.append('יפה מאוד! ', en(ch), ' כמו ', en(fmt(kw.w)), ' 🎉');
         nextBtn.classList.remove('hidden'); tools.classList.add('hidden');
         Speech.en(kw.w, .75);
@@ -2427,6 +2475,7 @@ function WriteLetters(res) {
 function WriteWords(res) {
   let list, wi = 0, earned = 0;
   if (res && res.list) { list = res.list.map(findWord).filter(Boolean); wi = res.wi; earned = res.earned; }
+  else if (Run) list = runWords(Run.rounds);
   else list = [...shuffle(levelWords(1)).slice(0, 2), ...shuffle(levelWords(2)).slice(0, 1), ...shuffle(levelWords(3)).slice(0, 1)];
   const saveAt = w => Resume.save('write-words', { list: list.map(x => x.w), wi: w, round: w, earned });
   function playWord() {
@@ -2451,6 +2500,7 @@ function WriteWords(res) {
         onMsg: t => { msg.textContent = t; },
         onSuccess: c => {
           addStar('write'); earned++; pop(c);
+          if (li === letters.length - 1) runAdd(0);   // a whole word written = one round on the map
           track.children[li].className = 'en done'; pop(track.children[li]);
           if (li < letters.length - 1) { burst(c, 8); li++; setTimeout(playLetter, 750); return; }
           burst(track, 22);
@@ -2540,7 +2590,10 @@ function StageRead(res) {
   const pool = readingPool();
   let list, round = 0, earned = 0;
   if (res && res.list) { list = res.list.map(findWord).filter(Boolean); round = res.round || 0; earned = res.earned || 0; }
-  else {
+  else if (Run) {
+    const ok = new Set(fitWords(Run).map(w => w.w));
+    list = runWords(99).filter(w => ok.has(w.w) && decodable(w.w)).slice(0, Run.rounds);
+  } else {
     const weak = shuffle(pool.filter(w => Mastery.isWeak('W:' + w.w))).slice(0, 2);
     const cur = shuffle(pool.filter(w => w.L === state.level && !weak.includes(w)));
     const prev = shuffle(pool.filter(w => w.L < state.level && !weak.includes(w)));
@@ -2799,6 +2852,173 @@ STAGES.push(
   { key: 'read',    icon: '📖', name: 'קוראים מילה', desc: 'מחברים צלילים וקוראים מילה שלמה', run: () => StageRead() },
   { key: 'talk',    icon: '💬', name: 'מדברים',     desc: 'ביטויים של כל יום, ומתי אומרים אותם', run: () => StageTalk() },
 );
+
+/* =========================================================
+   The map: one path, station after station, with no end.
+   Phase 1: letters two at a time (hear, pairs, write, then words as soon as there are enough).
+   Phase 2: words and a spelling test. Phase 3: sentences. Phase 4: endless mixed practice.
+   Points: 10 for a right answer on the first try, 3 after one mistake, 0 for a guessed round.
+   A station opens the next one only with enough points, and the bar goes up as the child learns.
+   Playing a station again never moves the map forward, so there is nothing to farm.
+   ========================================================= */
+const MAP_GROUPS = ['AB', 'CD', 'EF', 'GH', 'IJ', 'KL', 'MN', 'OP', 'QR', 'ST', 'UV', 'WX', 'YZ'];
+const KIND = {
+  listen: { icon: '👂', name: 'מה שמעת?', run: () => StageListen() },
+  pairs: { icon: '🃏', name: 'זוגות', run: () => StagePairs() },
+  write: { icon: '✏️', name: 'כותבים אותיות', run: () => WriteLetters() },
+  build: { icon: '🧩', name: 'בונים מילה', run: () => StageBuild() },
+  missing: { icon: '🔍', name: 'מה חסר?', run: () => StageMissing() },
+  read: { icon: '📖', name: 'קוראים מילה', run: () => StageRead() },
+  wwrite: { icon: '📝', name: 'כותבים מילה', run: () => WriteWords() },
+  mirror: { icon: '🪞', name: 'אותיות מראה', run: () => MirrorChallenge(0) },
+  talk: { icon: '💬', name: 'מדברים', run: () => StageTalk() },
+  chest: { icon: '🎁', name: 'תיבת הפתעה' },
+};
+const PHASES = { 1: 'אותיות, מילים וכתיבה', 2: 'מילים ומבחן כתיבה', 3: 'משפטים', 4: 'תרגול בלי סוף' };
+const ALL_ABC = MAP_GROUPS.join('').split('');
+// easy at the start, harder as the child knows more: more answers to choose from, more points needed
+const zoneOf = gi => gi < 2 ? { opts: 3, pct: .6 } : gi < 8 ? { opts: 4, pct: .75 } : { opts: 5, pct: .85 };
+const MAP = (() => {
+  const out = [], add = s => out.push({ rounds: 8, ...s, i: out.length });
+  let known = [];
+  MAP_GROUPS.forEach((grp, gi) => {
+    const letters = grp.split(''); known = [...known, ...letters];
+    const K = [...known], z = zoneOf(gi), level = findLetter(letters[0]).lvl;
+    const base = { phase: 1, letters, known: K, level, opts: Math.min(z.opts, K.length), pct: z.pct, tag: grp };
+    const words = fitWords({ known: K }).length;
+    add({ ...base, kind: 'listen' });
+    add({ ...base, kind: 'pairs', letters: [...letters, ...K.filter(x => !letters.includes(x)).slice(-4)] });
+    add({ ...base, kind: 'write', rounds: 2 });
+    if (words >= 5) add({ ...base, kind: 'build' });
+    if (words >= 8) add({ ...base, kind: 'missing' });
+    if (words >= 12 && gi % 2) add({ ...base, kind: 'read', rounds: 6 });
+    if (gi % 2) add({ ...base, kind: 'listen', letters: K.slice(-4), tag: 'חזרה', pct: Math.min(.9, z.pct + .05) });
+    if (gi === 3 || gi === 7 || gi === 12) {   // end of a block of letters
+      if (LEVELS[level - 1].mirror) add({ ...base, kind: 'mirror', tag: LEVELS[level - 1].mirror.join(' ') });
+      const lv = ALL_ABC.filter(L => findLetter(L).lvl === level);
+      add({ ...base, kind: 'listen', letters: lv, rounds: 10, pct: .9, quiz: true, tag: `${lv[0]}–${lv[lv.length - 1]}` });
+      add({ ...base, kind: 'chest' });
+    }
+  });
+  [1, 2, 3].forEach(wl => {
+    const base = { phase: 2, letters: [], known: ALL_ABC, level: wl, wl, opts: 5, pct: .8, tag: `מילים ${wl}` };
+    add({ ...base, kind: 'build' }); add({ ...base, kind: 'read', rounds: 6 }); add({ ...base, kind: 'missing' });
+    add({ ...base, kind: 'wwrite', rounds: 3 }); add({ ...base, kind: 'build', pct: .9, quiz: true, title: 'מבחן כתיבה' });
+    add({ ...base, kind: 'chest' });
+  });
+  [1, 2, 3].forEach(l => {
+    const base = { phase: 3, letters: [], known: ALL_ABC, level: l, opts: 5, pct: .8, tag: `ביטויים ${l}` };
+    add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk', pct: .9, quiz: true });
+    add({ ...base, kind: 'chest' });
+  });
+  return out;
+})();
+const ENDLESS = ['listen', 'build', 'read', 'missing', 'talk', 'wwrite', 'listen', 'build', 'talk'];
+function stationAt(i) {
+  if (i < MAP.length) return MAP[i];
+  const k = i - MAP.length, step = Math.floor(k / 10);
+  const base = { i, phase: 4, letters: [], known: ALL_ABC, level: 1 + (k % 3), opts: 6, pct: Math.min(.95, .85 + .01 * step), rounds: 8, dyn: true, tag: 'בלי סוף' };
+  if (k % 10 === 9) return { ...base, kind: 'chest' };
+  const kind = ENDLESS[(k - step) % ENDLESS.length];
+  return { ...base, kind, rounds: kind === 'wwrite' ? 3 : kind === 'read' || kind === 'talk' ? 6 : 8 };
+}
+const stationTitle = s => s.title || (s.quiz ? `🏁 בוחן: ${KIND[s.kind].name}` : KIND[s.kind].name);
+
+function mapState() {
+  let m = store.get('map', null);
+  if (!m) {
+    // a child who already knows letters from before starts after them, not from zero
+    let at = 0;
+    while (at < MAP.length && MAP[at].phase === 1 && MAP[at].kind !== 'chest' && MAP[at].letters.every(L => Mastery.isKnown('L:' + L))) at++;
+    m = { at, best: {} };
+    for (let i = 0; i < at; i++) m.best[i] = 3;
+    store.set('map', m);
+  }
+  return m;
+}
+const saveMap = m => store.set('map', m);
+const mapStars = m => Object.values(m.best).reduce((a, b) => a + b, 0);
+function runAdd(misses) { if (!Run) return; Run.max += 10; Run.points += misses === 0 ? 10 : misses === 1 ? 3 : 0; }
+function endRun() { if (!Run) return; Run = null; state.level = store.get('level', 1); }
+
+function startStation(i) {
+  const m = mapState();
+  if (i > m.at || !canPlay()) return;
+  const s = stationAt(i);
+  if (s.kind === 'chest') return openChest(i);
+  Run = { ...s, points: 0, max: 0 };
+  if (s.dyn) {
+    // endless practice: whatever was hard lately, otherwise a few random letters
+    const weak = ALL_ABC.filter(L => Mastery.isWeak('L:' + L));
+    Run.letters = (weak.length ? shuffle(weak) : shuffle(ALL_ABC)).slice(0, 3);
+  }
+  state.level = s.level;
+  Guard.reset();
+  KIND[s.kind].run();
+}
+function StationEnd() {
+  const r = Run; endRun(); Resume.clear(); Guard.reset();
+  const target = Math.ceil(r.max * r.pct), part = r.max ? r.points / r.max : 0;
+  const pass = r.max > 0 && r.points >= target;
+  const stars = !pass ? 0 : part >= 1 ? 3 : part >= (1 + r.pct) / 2 ? 2 : 1;
+  const m = mapState(); let moved = false;
+  if (pass) {
+    if ((m.best[r.i] || 0) < stars) m.best[r.i] = stars;
+    if (r.i === m.at) { m.at++; moved = true; }
+    saveMap(m);
+  }
+  const app = screen(pass ? 'עברת!' : 'עוד קצת');
+  const bar = h('div', { class: 'pts-track' }, h('i', { style: `width:${Math.round(part * 100)}%` }), h('b', { style: `right:${Math.round(r.pct * 100)}%` }));
+  app.append(h('div', { class: 'end' },
+    h('div', { class: 'big' }, pass ? '🏆' : '💪'),
+    h('h2', null, pass ? (moved ? 'עברת את התחנה! תחנה חדשה נפתחה 🎉' : 'עברת את התחנה!') : 'עוד קצת וזה שלך!'),
+    h('div', { class: 'map-stars' }, [1, 2, 3].map(n => h('span', { class: n <= stars ? 'on' : '' }, '★'))),
+    h('p', { class: 'sub' }, `${r.points} נקודות מתוך ${r.max}. כדי לעבור צריך ${target}.`),
+    bar,
+    pass ? null : h('p', { class: 'hint' }, 'נקודות מקבלים על תשובה נכונה בניסיון הראשון. ניחוש לא נותן נקודות, אז כדאי לעצור ולחשוב לפני שלוחצים 🦉'),
+    h('div', { class: 'row' },
+      pass && r.i + 1 <= mapState().at ? h('button', { class: 'btn green', onclick: () => startStation(r.i + 1) }, 'לתחנה הבאה ←') : null,
+      h('button', { class: 'btn orange', onclick: () => startStation(r.i) }, pass ? '🔁 לשחק שוב' : '🔁 לנסות שוב')),
+    h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה'))));
+  if (pass) { burst($('.big', app), 24); Speech.en('Great job!'); }
+  checkBreak();
+}
+function openChest(i) {
+  const m = mapState();
+  const left = STICKERS.filter(s => !state.stickers.includes(s));
+  const got = i === m.at ? (left.length ? pick(left) : '🏅') : null;
+  if (got && got !== '🏅') { state.stickers.push(got); store.set('stickers', state.stickers); }
+  if (i === m.at) { m.best[i] = 3; m.at++; saveMap(m); }
+  const app = screen('תיבת הפתעה');
+  const chest = h('div', { class: 'big' }, '🎁');
+  app.append(h('div', { class: 'end' }, chest,
+    h('h2', null, got ? 'מדבקה חדשה לאלבום!' : 'את התיבה הזו כבר פתחת'),
+    got ? h('div', { class: 'sticker-won' }, got) : null,
+    h('div', { class: 'row' }, h('button', { class: 'btn green', onclick: () => startStation(i + 1) }, 'לתחנה הבאה ←')),
+    h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה'))));
+  if (got) burst(chest, 30);
+}
+// step 1: the map as a simple list (the drawn map comes next)
+function MapScreen() {
+  endRun();
+  const m = mapState();
+  const app = screen('המפה');
+  app.append(h('div', { class: 'map-head' }, h('b', null, `⭐ ${mapStars(m)} כוכבים במפה`), h('span', null, `תחנה ${m.at + 1}`)));
+  const list = h('div', { class: 'map-list' });
+  let phase = 0;
+  for (let i = 0; i <= m.at + 5; i++) {
+    const s = stationAt(i);
+    if (s.phase !== phase) { phase = s.phase; list.append(h('div', { class: 'map-phase' }, `שלב ${phase}: ${PHASES[phase]}`)); }
+    const st = i < m.at ? 'done' : i === m.at ? 'now' : 'locked';
+    const best = m.best[i] || 0;
+    list.append(h('button', { class: `map-st ${st}${s.quiz ? ' quiz' : ''}`, disabled: st === 'locked', onclick: () => startStation(i) },
+      h('span', { class: 'ic' }, st === 'locked' ? '🔒' : KIND[s.kind].icon),
+      h('span', { class: 'txt' }, h('b', null, `${i + 1}. ${stationTitle(s)}`), s.tag ? h('small', { class: /^[A-Z ]+$/.test(s.tag) ? 'en' : '' }, s.tag) : null),
+      h('span', { class: 'got' }, st === 'now' ? 'עכשיו ▶' : st === 'done' ? '★'.repeat(best) + '☆'.repeat(3 - best) : '')));
+  }
+  app.append(list);
+  const now = $('.map-st.now', list); if (now) now.scrollIntoView({ block: 'center' });
+}
 
 /* =========================================================
    Start
