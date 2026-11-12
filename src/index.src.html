@@ -34,6 +34,14 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 #app.think .choice,#app.think .opt,#app.think .tile,#app.think .chip:not(.placed){pointer-events:none;opacity:.45;filter:grayscale(.5);transition:opacity .3s}
 .think-badge{position:fixed;top:calc(70px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:30;background:var(--ink);color:#fff;padding:8px 18px;border-radius:999px;font-weight:800;font-size:17px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
 .think-badge[hidden]{display:none}
+.btn.google-btn{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1f1f1f;border:2px solid #dadce0;box-shadow:0 3px 0 #dadce0}
+.google-btn .g-logo{font-family:Arial,sans-serif;font-weight:900;font-size:19px;background:conic-gradient(from -45deg,#ea4335 0 25%,#4285f4 0 50%,#34a853 0 75%,#fbbc05 0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.acct-err{color:var(--red);font-weight:700}
+.acct-err:empty{display:none}
+.login-card{margin-top:14px}
+.login-card p{margin:8px 0 14px}
+.login-card .google-btn{justify-content:center;font-size:19px}
+.login-card .small-note{font-size:13px;margin:14px 0 0;color:var(--muted,#666)}
 .timer.low{background:var(--orange-soft);box-shadow:0 2px 0 var(--orange)}
 .timer.over{background:var(--red-soft);box-shadow:0 2px 0 var(--red)}
 
@@ -607,10 +615,12 @@ const RAW = {
   del(k) { try { localStorage.removeItem('abcAH_' + k); } catch (e) { delete MEM[k]; } },
 };
 let PID = null;
+// set by Sync (parent account): every change to a child is also sent to the account
+let onKidChange = () => {}, onKidRemoved = () => {};
 const store = {
   get(k, d) { return RAW.get(`p${PID}_${k}`, d); },
-  set(k, v) { RAW.set(`p${PID}_${k}`, v); },
-  del(k) { RAW.del(`p${PID}_${k}`); },
+  set(k, v) { RAW.set(`p${PID}_${k}`, v); onKidChange(PID); },
+  del(k) { RAW.del(`p${PID}_${k}`); onKidChange(PID); },
 };
 const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess'];
 
@@ -620,15 +630,17 @@ const state = {
   startedAt: null, breakShown: false,
 };
 
-/* Child profiles: nickname + avatar + boy/girl (for Hebrew grammar). No passwords, nothing leaves the phone. */
+/* Child profiles: nickname + avatar + boy/girl (for Hebrew grammar). No passwords.
+   On the site they also live in the parent's account (see Sync). */
 const AVATARS = ['🦁', '🐯', '🐼', '🦊', '🐸', '🐵', '🦄', '🐙', '🐬', '🦖', '🐧', '🐝'];
 const Profiles = {
   list() { return RAW.get('profiles', []); },
   save(list) { RAW.set('profiles', list); },
   get(id) { return this.list().find(p => p.id === id) || null; },
-  add(p) { const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5); this.save([...this.list(), { ...p, id }]); return id; },
-  update(id, patch) { this.save(this.list().map(p => p.id === id ? { ...p, ...patch } : p)); },
+  add(p) { const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5); this.save([...this.list(), { ...p, id }]); onKidChange(id); return id; },
+  update(id, patch) { this.save(this.list().map(p => p.id === id ? { ...p, ...patch } : p)); onKidChange(id); },
   remove(id) {
+    onKidRemoved(id);
     for (const k of PROFILE_KEYS) RAW.del(`p${id}_${k}`);
     this.save(this.list().filter(p => p.id !== id));
     if (RAW.get('active', null) === id) RAW.del('active');
@@ -1123,6 +1135,7 @@ function goalBar() {
     h('span', null, min >= goal ? `🎯 היעד של היום הושג! (${min} דקות)` : `🎯 היום: ${min} מתוך ${goal} דקות`)];
 }
 function Home() {
+  if (Cloud.possible() && !Cloud.known()) return LoginScreen();
   if (!PID) return ProfilePicker();
   Guard.reset();
   const app = screen('אותיות באנגלית', false);
@@ -1185,7 +1198,8 @@ function Home() {
     goalSel,
     h('p', null, 'כשמגיעים ליעד היומי מקבלים מדבקה לאלבום, ויום אחרי יום נבנה רצף 🔥. סופרים רק זמן שבו באמת נוגעים במסך.'),
     h('p', null, 'רמה 1: ', en('A–H'), '. רמה 2: ', en('I–P'), '. רמה 3: ', en('Q–Z'), '. המילים בכל רמה בנויות רק מאותיות שכבר נלמדו.'),
-    h('p', null, 'ההתקדמות נשמרת רק בטלפון הזה ובדפדפן הזה, לכל ילד בנפרד. שום מידע לא נשלח לאינטרנט. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
+    h('p', null, 'לכל ילד יש התקדמות משלו. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
+    accountBox(),
     timerSettings(),
     voiceSettings(),
     installHelp(),
@@ -1283,6 +1297,257 @@ function afterUpdate() {
   toast(want === APP_VERSION ? `✅ המשחק עודכן לגרסה החדשה (${APP_BUILT})` : '⏳ הגרסה החדשה עוד לא הגיעה לשרת. נסו שוב בעוד כמה דקות.');
 }
 
+/* =========================================================
+   Parent account (Google sign-in through Firebase) + saving the children in the account
+   On the site the parent signs in first. Each child's progress is kept on the phone (so the game works
+   offline) and copied to the parent's account, so it can continue on another phone.
+   A file sent in WhatsApp cannot sign in, so there everything stays on the phone like before.
+   ========================================================= */
+const FB_LIB = 'https://www.gstatic.com/firebasejs/13.1.0/';   // Google's own CDN, pinned version
+const FB_CONFIG = {
+  apiKey: 'AIzaSyCnauAFLGJR5vAVBFBIiCNzbiuTgEeAOfI', authDomain: 'english-letters-game.firebaseapp.com',
+  projectId: 'english-letters-game', appId: '1:70760524380:web:d83fb5bd6a81130ccb1499',
+};
+const FS = 'https://firestore.googleapis.com/v1/projects/english-letters-game/databases/(default)/documents';
+const Cloud = {
+  user: null, auth: null, fa: null, loading: null, err: '',
+  // Google sign-in works only from the site itself (an allowed domain), not from a file
+  possible() { return location.protocol === 'https:' || location.hostname === 'localhost'; },
+  known() { return RAW.get('acct', null); },
+  load() {
+    if (!this.possible()) return Promise.reject(new Error('file'));
+    if (!this.loading) this.loading = (async () => {
+      const [fapp, fa] = await Promise.all([import(FB_LIB + 'firebase-app.js'), import(FB_LIB + 'firebase-auth.js')]);
+      const auth = fa.getAuth(fapp.initializeApp(FB_CONFIG));
+      auth.languageCode = 'he';
+      await auth.authStateReady();
+      this.fa = fa; this.auth = auth; this.setUser(auth.currentUser);
+      fa.onAuthStateChanged(auth, u => { this.setUser(u); this.redraw(); });
+      return auth;
+    })().catch(e => { this.loading = null; throw e; });
+    return this.loading;
+  },
+  setUser(u) {
+    this.user = u || null;
+    if (u) RAW.set('acct', { name: u.displayName || '', email: u.email || '' }); else RAW.del('acct');
+  },
+  async uid() { await this.load(); if (!this.auth.currentUser) throw new Error('signed-out'); return this.auth.currentUser.uid; },
+  async token() { await this.load(); if (!this.auth.currentUser) throw new Error('signed-out'); return this.auth.currentUser.getIdToken(); },
+  // returns true when signed in; on failure leaves a Hebrew message in Cloud.err
+  async signIn() {
+    this.err = '';
+    try {
+      await this.load();
+      const p = new this.fa.GoogleAuthProvider();
+      p.setCustomParameters({ prompt: 'select_account' });
+      const r = await this.fa.signInWithPopup(this.auth, p);
+      this.setUser(r.user);
+      return true;
+    } catch (e) {
+      const c = (e && e.code) || '';
+      this.err = c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request' ? ''
+        : c === 'auth/popup-blocked' ? 'הדפדפן חסם את חלון ההתחברות. מאשרים חלונות קופצים לאתר הזה ומנסים שוב.'
+        : c === 'auth/network-request-failed' || !navigator.onLine || !c ? 'אין חיבור לאינטרנט. בפעם הראשונה צריך אינטרנט כדי להתחבר.'
+        : c === 'auth/operation-not-supported-in-this-environment' || c === 'auth/web-storage-unsupported' ? 'הדפדפן הזה לא מאפשר התחברות. פותחים את האתר ב־Chrome או ב־Safari ומנסים שוב.'
+        : `ההתחברות לא הצליחה (${c}). נסו שוב.`;
+      return false;
+    }
+  },
+  async signOut() {
+    if (Sync.pending()) await Sync.push();
+    if (Sync.pending()) {
+      if (!confirm('יש התקדמות שעוד לא נשמרה בחשבון, כי אין אינטרנט. אם מתנתקים עכשיו היא תימחק מהטלפון. להתנתק בכל זאת?')) return;
+    } else if (!confirm('להתנתק? הילדים וההתקדמות שמורים בחשבון, ויחזרו כשמתחברים שוב.')) return;
+    try { await this.load(); await this.fa.signOut(this.auth); } catch (e) {}
+    this.setUser(null);
+    Sync.wipeLocal(); RAW.del('owner');
+    renderStars(); LoginScreen();
+  },
+  redraw() { const b = document.getElementById('acctBox'); if (b && b._draw) b._draw(); },
+};
+
+/* Children in the account: parents/{parent}/kids/{child} = name, avatar, boy/girl, progress (JSON text), updated.
+   The phone copy is what the game uses; changes are sent a few seconds later. Newer copy wins per child. */
+const Sync = {
+  timer: null, busy: false, status: '',
+  on() { return Cloud.possible() && !!Cloud.known(); },
+  dirty() { return RAW.get('dirty', {}); },
+  pending() { return Object.keys(this.dirty()).length + RAW.get('delq', []).length; },
+  setStatus(s) { this.status = s; Cloud.redraw(); },
+  touch(id) {
+    if (!id || !this.on()) return;
+    RAW.set(`p${id}_upd`, Date.now());
+    const d = this.dirty(); if (!d[id]) { d[id] = 1; RAW.set('dirty', d); }
+    this.later();
+  },
+  removed(id) {
+    RAW.del(`p${id}_upd`);
+    const d = this.dirty(); delete d[id]; RAW.set('dirty', d);
+    const s = RAW.get('synced', []);
+    if (this.on() && s.includes(id)) { RAW.set('delq', [...new Set([...RAW.get('delq', []), id])]); RAW.set('synced', s.filter(x => x !== id)); }
+    this.later(1000);
+  },
+  // one send at a time, a few seconds after the last change (play keeps writing, so the timer is not reset)
+  later(ms = 8000) { if (!this.on() || this.timer) return; this.timer = setTimeout(() => { this.timer = null; this.push(); }, ms); },
+  async api(method, path, body, keepalive) {
+    const tok = await Cloud.token();
+    const r = await fetch(FS + path, {
+      method, keepalive: !!keepalive, cache: 'no-store',
+      headers: body ? { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' } : { Authorization: 'Bearer ' + tok },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (r.status === 404 && method !== 'PATCH') return null;
+    if (!r.ok) throw new Error('save ' + r.status);
+    return r.json().catch(() => null);
+  },
+  kidDoc(id) {
+    const p = Profiles.get(id), progress = {};
+    for (const k of PROFILE_KEYS) { const v = RAW.get(`p${id}_${k}`, null); if (v != null) progress[k] = v; }
+    return { fields: {
+      name: { stringValue: String(p.name).slice(0, 30) }, avatar: { stringValue: p.avatar }, g: { stringValue: p.g === 'f' ? 'f' : 'm' },
+      progress: { stringValue: JSON.stringify(progress) }, updated: { integerValue: String(RAW.get(`p${id}_upd`, Date.now())) },
+    } };
+  },
+  async push(keepalive) {
+    if (!this.on() || this.busy || !this.pending()) return;
+    if (!navigator.onLine) { this.setStatus('offline'); this.later(30000); return; }
+    this.busy = true; this.setStatus('saving');
+    try {
+      const uid = await Cloud.uid();
+      for (const id of RAW.get('delq', [])) {
+        await this.api('DELETE', `/parents/${uid}/kids/${id}`, null, keepalive);
+        RAW.set('delq', RAW.get('delq', []).filter(x => x !== id));
+      }
+      for (const id of Object.keys(this.dirty())) {
+        if (!Profiles.get(id)) { const d = this.dirty(); delete d[id]; RAW.set('dirty', d); continue; }
+        const at = RAW.get(`p${id}_upd`, 0);
+        await this.api('PATCH', `/parents/${uid}/kids/${id}`, this.kidDoc(id), keepalive);
+        const d = this.dirty(); if (RAW.get(`p${id}_upd`, 0) === at) delete d[id]; RAW.set('dirty', d);   // changed while sending: send again
+        const s = RAW.get('synced', []); if (!s.includes(id)) RAW.set('synced', [...s, id]);
+      }
+      this.setStatus(this.pending() ? 'saving' : 'saved');
+      if (this.pending()) this.later(2000);
+    } catch (e) {
+      this.setStatus(navigator.onLine ? 'error' : 'offline'); this.later(60000);
+    }
+    this.busy = false;
+  },
+  // bring the account's children to this phone. Returns true if something on the phone changed.
+  async pull() {
+    const uid = await Cloud.uid();
+    const out = await this.api('GET', `/parents/${uid}/kids?pageSize=100`);
+    const docs = (out && out.documents) || [];
+    const inCloud = new Set(), d = this.dirty(), synced = new Set(RAW.get('synced', [])), gone = new Set(RAW.get('delq', []));
+    let list = Profiles.list(), changed = false;
+    for (const doc of docs) {
+      const id = doc.name.split('/').pop(), f = doc.fields || {};
+      if (gone.has(id)) continue;   // deleted here, the delete is still on its way
+      inCloud.add(id); synced.add(id);
+      const cu = Number((f.updated && f.updated.integerValue) || 0);
+      const local = list.find(p => p.id === id);
+      if (local && RAW.get(`p${id}_upd`, 0) >= cu) { if (RAW.get(`p${id}_upd`, 0) > cu) d[id] = 1; continue; }
+      let prog = {}; try { prog = JSON.parse((f.progress && f.progress.stringValue) || '{}'); } catch (e) {}
+      for (const k of PROFILE_KEYS) { if (k in prog) RAW.set(`p${id}_${k}`, prog[k]); else RAW.del(`p${id}_${k}`); }
+      const meta = { id, name: (f.name && f.name.stringValue) || 'ילד', avatar: (f.avatar && f.avatar.stringValue) || '🦁', g: f.g && f.g.stringValue === 'f' ? 'f' : 'm' };
+      list = local ? list.map(p => p.id === id ? { ...p, ...meta } : p) : [...list, meta];
+      RAW.set(`p${id}_upd`, cu); delete d[id]; changed = true;
+    }
+    // a child that was in the account but is not there any more was deleted on another phone
+    for (const p of [...list]) if (!inCloud.has(p.id)) {
+      if (synced.has(p.id) && !d[p.id]) {
+        for (const k of PROFILE_KEYS) RAW.del(`p${p.id}_${k}`);
+        RAW.del(`p${p.id}_upd`); synced.delete(p.id); list = list.filter(x => x.id !== p.id); changed = true;
+      } else d[p.id] = 1;   // made on this phone and not sent yet
+    }
+    Profiles.save(list); RAW.set('dirty', d); RAW.set('synced', [...synced]);
+    if (PID && !Profiles.get(PID)) { PID = null; RAW.del('active'); }
+    else if (PID && changed) loadProfile(PID);
+    return changed;
+  },
+  // right after the parent signs in
+  async start() {
+    const uid = await Cloud.uid(), owner = RAW.get('owner', null);
+    if (owner && owner !== uid) this.wipeLocal();   // children of another account were left on this phone
+    if (!owner) {   // children made before there were accounts move into this account
+      const d = this.dirty();
+      for (const p of Profiles.list()) { if (!RAW.get(`p${p.id}_upd`, 0)) RAW.set(`p${p.id}_upd`, 1); d[p.id] = 1; }
+      RAW.set('dirty', d);
+    }
+    RAW.set('owner', uid);
+    await this.pull();
+    await this.push();
+  },
+  // in the background when the game opens: new children / progress from other phones
+  async refresh() {
+    if (!this.on() || !navigator.onLine) return;
+    try {
+      await Cloud.load();
+      if (!Cloud.user) return;
+      const changed = await this.pull();
+      await this.push();
+      if (changed && document.querySelector('#app .stage-list, #app .who')) { renderStars(); Home(); }
+    } catch (e) {}
+  },
+  wipeLocal() {
+    for (const p of Profiles.list()) { for (const k of PROFILE_KEYS) RAW.del(`p${p.id}_${k}`); RAW.del(`p${p.id}_upd`); }
+    Profiles.save([]);
+    for (const k of ['active', 'dirty', 'synced', 'delq']) RAW.del(k);
+    PID = null;
+  },
+};
+onKidChange = id => Sync.touch(id);
+onKidRemoved = id => Sync.removed(id);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Sync.push(true); });
+window.addEventListener('online', () => Sync.push());
+
+/* The first screen on the site: the parent signs in with Google */
+function LoginScreen() {
+  const app = screen('אותיות באנגלית', false);
+  const err = h('p', { class: 'acct-err', style: 'margin:10px 0 0' });
+  const btn = h('button', { class: 'btn google-btn wide', type: 'button' }, h('span', { class: 'g-logo', 'aria-hidden': 'true' }, 'G'), ' כניסה עם Google');
+  const label = btn.lastChild;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; label.textContent = ' מתחברים...'; err.textContent = '';
+    if (!await Cloud.signIn()) { btn.disabled = false; label.textContent = ' כניסה עם Google'; err.textContent = Cloud.err ? '⚠️ ' + Cloud.err : ''; return; }
+    label.textContent = ' טוענים את הילדים מהחשבון...';
+    try { await Sync.start(); } catch (e) { toast('📡 לא הצלחנו לטעון את הילדים מהחשבון. ננסה שוב בפעם הבאה.'); }
+    { const act = RAW.get('active', null); if (act && Profiles.get(act)) loadProfile(act); }
+    renderStars(); Home();
+  });
+  app.append(
+    h('div', { class: 'home-hello' }, h('h1', null, 'שלום! 👋'), h('p', { class: 'sub' }, 'משחק לילדים שלומדים את האותיות באנגלית.')),
+    h('div', { class: 'card login-card' },
+      h('b', null, '👤 כניסת הורים'),
+      h('p', null, 'ההורה נכנס עם חשבון הגוגל שלו. בתוך החשבון מוסיפים את הילדים, וכל ילד מתקדם בקצב שלו. ההתקדמות נשמרת בחשבון, ואפשר להמשיך גם מטלפון אחר.'),
+      btn, err,
+      h('p', { class: 'small-note' }, 'הילדים לא צריכים חשבון או סיסמה. נשמרים רק השם והמייל של ההורה, ולכל ילד כינוי, דמות והתקדמות. בלי פרסומות ובלי מעקב.')));
+  Cloud.load().catch(() => {});   // ready before the tap, so the Google window opens right away
+}
+
+const SYNC_TEXT = { saving: '⏳ שומרים בחשבון...', saved: '✅ הכול שמור בחשבון.', offline: '📡 אין אינטרנט. ההתקדמות תישמר בחשבון כשיחזור החיבור.', error: '⚠️ השמירה בחשבון לא הצליחה. ננסה שוב בעוד דקה.' };
+function accountBox() {
+  const box = h('div', { class: 'card', id: 'acctBox', style: 'margin:12px 0' });
+  box._draw = () => {
+    const a = Cloud.user ? { name: Cloud.user.displayName, email: Cloud.user.email } : Cloud.known();
+    const kids = [h('b', null, '👤 חשבון הורה')];
+    if (!Cloud.possible()) {
+      kids.push(h('p', { style: 'margin:6px 0' }, 'זה קובץ ששלחו, ולכן ההתקדמות נשמרת רק בטלפון הזה. כדי לשמור בחשבון גוגל ולהמשיך מכל טלפון, פותחים את האתר.'),
+        h('a', { class: 'btn small', href: SITE, target: '_blank', rel: 'noopener' }, 'פתיחת האתר'));
+    } else if (a) {
+      const st = Sync.status || (Sync.pending() ? (navigator.onLine ? 'saving' : 'offline') : 'saved');
+      kids.push(h('p', { style: 'margin:6px 0' }, 'מחובר/ת בתור ', h('b', null, a.name || ''), a.email ? h('span', { dir: 'ltr', style: 'display:block;text-align:right;font-size:14px' }, a.email) : ''),
+        h('p', { class: 'sync-st', style: 'margin:6px 0' }, SYNC_TEXT[st] || ''),
+        h('div', { class: 'row', style: 'justify-content:flex-start' },
+          h('button', { class: 'btn small', onclick: async () => { Sync.setStatus('saving'); await Sync.refresh(); if (!Sync.pending()) Sync.setStatus(navigator.onLine ? 'saved' : 'offline'); } }, '🔄 סנכרון עכשיו'),
+          h('button', { class: 'btn secondary small', onclick: () => Cloud.signOut() }, 'התנתקות')));
+    }
+    kids.push(h('p', { style: 'margin:8px 0 0;font-size:13px' }, 'כל ילד מתקדם בקצב שלו. ההתקדמות נשמרת בטלפון, כדי שאפשר יהיה לשחק גם בלי אינטרנט, ובחשבון של ההורה.'));
+    box.replaceChildren(...kids);
+  };
+  box._draw();
+  return box;
+}
+
 function voiceSettings() {
   const box = h('div', { class: 'card', style: 'margin:12px 0' });
   if (!Speech.ok) { box.append(h('p', { style: 'margin:0' }, '🔊 הדפדפן הזה לא תומך בהקראה.')); return box; }
@@ -1343,7 +1608,8 @@ function ProfilePicker() {
         h('span', { class: 'av' }, p.avatar), h('span', { class: 'nm' }, p.name),
         h('small', null, `⭐ ${RAW.get(`p${p.id}_stars`, 0)}`))),
       h('button', { class: 'who-card add', onclick: () => ProfileForm() }, h('span', { class: 'av' }, '➕'), 'ילד חדש')),
-    h('p', { class: 'sub', style: 'margin-top:16px' }, 'לכל ילד יש התקדמות, כוכבים ומדבקות משלו. הכול נשמר רק בטלפון הזה.'));
+    h('p', { class: 'sub', style: 'margin-top:16px' }, 'לכל ילד יש התקדמות, כוכבים ומדבקות משלו. ',
+      Sync.on() ? 'הכול נשמר בחשבון של ההורה.' : 'הכול נשמר רק בטלפון הזה.'));
   enter($('.who', app));
 }
 function ProfileForm(id) {
@@ -2544,6 +2810,7 @@ PlayTimer.init();
 renderStars();
 Home();
 afterUpdate();
+Sync.refresh();   // children and progress from the parent's other phones
 
 // Install as an app + offline, only when served from the website (not from a WhatsApp file)
 if (/^https?:$/.test(location.protocol)) {
