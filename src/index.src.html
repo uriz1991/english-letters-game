@@ -29,6 +29,13 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 .icon-btn{border:0;background:var(--card);border-radius:12px;padding:8px 12px;font-weight:700;box-shadow:0 2px 0 var(--line);min-height:40px}
 .icon-btn[hidden]{display:inline-block;visibility:hidden}
 .stars{font-weight:800;background:var(--card);padding:8px 10px;border-radius:12px;box-shadow:0 2px 0 var(--line);min-width:70px;text-align:center}
+.timer{font-weight:800;background:var(--card);padding:8px 8px;border-radius:12px;box-shadow:0 2px 0 var(--line);white-space:nowrap;font-variant-numeric:tabular-nums;direction:ltr}
+.timer[hidden]{display:none}
+#app.think .choice,#app.think .opt,#app.think .tile,#app.think .chip:not(.placed){pointer-events:none;opacity:.45;filter:grayscale(.5);transition:opacity .3s}
+.think-badge{position:fixed;top:calc(70px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:30;background:var(--ink);color:#fff;padding:8px 18px;border-radius:999px;font-weight:800;font-size:17px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.think-badge[hidden]{display:none}
+.timer.low{background:var(--orange-soft);box-shadow:0 2px 0 var(--orange)}
+.timer.over{background:var(--red-soft);box-shadow:0 2px 0 var(--red)}
 
 main{flex:1;width:100%;max-width:520px;margin:0 auto;padding:16px 16px 40px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:16px;padding:12px 20px;font-size:18px;font-weight:800;color:#fff;background:var(--blue);box-shadow:0 4px 0 var(--blue-dark);min-height:52px}
@@ -266,10 +273,12 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 <header class="top">
   <button id="backBtn" class="icon-btn" hidden>→ תפריט</button>
   <div class="title" id="screenTitle">אותיות באנגלית</div>
+  <div class="timer" id="timer" hidden></div>
   <div class="stars" id="stars">⭐ <span id="starCount">0</span></div>
 </header>
 <main id="app"></main>
 <div id="toast" class="toast" hidden></div>
+<div id="think" class="think-badge" hidden></div>
 <div id="fx" class="fx" aria-hidden="true"></div>
 <div id="modal" class="modal" hidden></div>
 
@@ -603,11 +612,11 @@ const store = {
   set(k, v) { RAW.set(`p${PID}_${k}`, v); },
   del(k) { RAW.del(`p${PID}_${k}`); },
 };
-const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal'];
+const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess'];
 
 const state = {
   stars: 0, stageStars: {}, done: {}, caseMode: 'upper', level: 1,
-  mastery: {}, time: {}, goalDays: [], stickers: [], goal: 10,
+  mastery: {}, time: {}, goalDays: [], stickers: [], goal: 10, timerMin: 0, guess: {},
   startedAt: null, breakShown: false,
 };
 
@@ -644,9 +653,10 @@ function loadProfile(id) {
     stars: store.get('stars', 0), stageStars: store.get('stageStars', {}), done: store.get('done', {}),
     caseMode: store.get('case', 'upper'), level: store.get('level', 1),
     mastery: store.get('mastery', {}), time: store.get('time', {}), goalDays: store.get('goalDays', []),
-    stickers: store.get('stickers', []), goal: store.get('goal', 10),
+    stickers: store.get('stickers', []), goal: store.get('goal', 10), timerMin: store.get('timerMin', 0), guess: store.get('guess', {}),
     startedAt: null, breakShown: false,
   });
+  PlayTimer.render();
 }
 const fmt = s => state.caseMode === 'upper' ? s.toUpperCase() : s.toLowerCase();
 const curLevel = () => LEVELS[state.level - 1];
@@ -871,6 +881,59 @@ function addStar(stageKey, n = 1) {
   store.set('stars', state.stars); store.set('stageStars', state.stageStars);
   renderStars(); pop($('#stars'));
 }
+/* =========================================================
+   Guess guard: tapping answers until one is right is guessing, not learning.
+   A round with too many wrong taps gives no star (and Mastery already counts it as a mistake).
+   Guessing a few rounds in a row -> a short "let's stop and think" screen, then for the rest
+   of the stage the answers wait a few seconds before they can be tapped.
+   Parents see how many rounds were guessed in the report.
+   ========================================================= */
+const Guard = {
+  misses: 0, streak: 0, guessed: 0, slow: false, timer: null, THINK: 3,
+  reset() { this.streak = 0; this.guessed = 0; this.slow = false; this.unthink(); },
+  start() { this.misses = 0; if (this.slow) this.think(); },
+  miss() { this.misses++; },
+  // returns how many stars were given (0 or 1). limit = wrong tries that make a round "guessed"
+  star(stageKey, limit = 2) {
+    if (this.misses < limit) { this.streak = 0; addStar(stageKey); return 1; }
+    this.streak++; this.guessed++;
+    const k = dayKey();
+    state.guess[k] = (state.guess[k] || 0) + 1;
+    const keys = Object.keys(state.guess).sort(); while (keys.length > 60) delete state.guess[keys.shift()];
+    store.set('guess', state.guess);
+    toast('🤔 בסבב הזה לא נכנס כוכב, כי היו הרבה ניחושים. כוכבים והתקדמות מקבלים רק על תשובות שחושבים עליהן לפני שלוחצים.', 6000);
+    if (!this.slow && (this.streak >= 2 || this.guessed >= 3)) { this.slow = true; setTimeout(showThinkPause, 900); }
+    return 0;
+  },
+  think() {
+    const app = $('#app'), badge = $('#think');
+    clearInterval(this.timer);
+    let n = this.THINK;
+    app.classList.add('think'); badge.hidden = false; badge.textContent = `🤔 חושבים... ${n}`;
+    this.timer = setInterval(() => { n--; if (n > 0) badge.textContent = `🤔 חושבים... ${n}`; else this.unthink(); }, 1000);
+  },
+  unthink() { clearInterval(this.timer); const a = $('#app'), b = $('#think'); if (a) a.classList.remove('think'); if (b) b.hidden = true; },
+};
+function showThinkPause() {
+  const m = $('#modal');
+  const go = h('button', { class: 'btn green wide', disabled: true, onclick: () => { m.hidden = true; } }, '5');
+  m.innerHTML = '';
+  m.append(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' },
+    h('div', { class: 'prompt' }, g('רגע, בוא נעצור שנייה', 'רגע, בואי נעצור שנייה')),
+    h('span', { class: 'sticker' }, '🦉'),
+    h('p', { class: 'sub' }, g('נראה שאתה לוחץ על תשובות כדי לנחש.', 'נראה שאת לוחצת על תשובות כדי לנחש.') + ' על ניחוש לא מקבלים כוכב, וההתקדמות לא נספרת.'),
+    h('p', { class: 'sub' }, `👂 ${g('הקשב', 'הקשיבי')} עד הסוף · 🤔 ${g('חשוב', 'חשבי')} · 👆 ורק אז ${g('בחר', 'בחרי')}`),
+    h('p', { class: 'sub' }, 'מעכשיו יש כמה שניות לחשוב לפני שאפשר לבחור.'),
+    go));
+  m.hidden = false;
+  let n = 5;
+  const tick = () => {
+    if (n > 0) { go.textContent = `${n}...`; n--; setTimeout(tick, 1000); }
+    else { go.disabled = false; go.textContent = g('הבנתי, אני מוכן ✋', 'הבנתי, אני מוכנה ✋'); pop(go); }
+  };
+  tick();
+}
+
 let toastTimer = null;
 function toast(msg, ms = 4200) {
   const t = $('#toast'); t.textContent = msg; t.hidden = false;
@@ -886,6 +949,102 @@ function checkBreak() {
   }
 }
 function markStarted() { if (!state.startedAt) state.startedAt = Date.now(); }
+// every way into a stage goes through here: after the play timer ran out, show the time-up screen instead
+function canPlay() {
+  if (PlayTimer.isOver()) { showTimeUp(false); return false; }
+  markStarted(); return true;
+}
+
+/* =========================================================
+   Bell: made with Web Audio, so no sound file is needed and it works offline.
+   Phones allow sound only after a touch, so the audio is unlocked on the first touch.
+   ========================================================= */
+const Bell = {
+  ctx: null,
+  unlock() {
+    try {
+      if (!this.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; this.ctx = new AC(); }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) {}
+  },
+  strike(t, f, vol) {
+    const c = this.ctx, out = c.createGain();
+    out.gain.setValueAtTime(vol, t); out.gain.exponentialRampToValueAtTime(.001, t + 1.6); out.connect(c.destination);
+    for (const [mul, amp] of [[1, 1], [2.76, .35], [5.4, .15]]) {   // bell-like overtones
+      const o = c.createOscillator(), a = c.createGain();
+      o.type = 'sine'; o.frequency.value = f * mul; a.gain.value = amp;
+      o.connect(a); a.connect(out); o.start(t); o.stop(t + 1.7);
+    }
+  },
+  play(notes) {
+    this.unlock(); if (!this.ctx) return;
+    const t = this.ctx.currentTime + .05;
+    notes.forEach(([dt, f, v]) => this.strike(t + dt, f, v));
+  },
+  ding() { this.play([[0, 880, .35]]); },
+  ring() { this.play(Array.from({ length: 8 }, (_, i) => [i * .32, i % 2 ? 784 : 988, .5])); },
+};
+addEventListener('pointerdown', () => Bell.unlock(), { passive: true });
+
+/* =========================================================
+   Play timer: the parent sets minutes per child. Counts seconds while a stage was started
+   and the game is on screen. One minute before the end a soft ding, at the end a bell.
+   Resets every day; a parent can add minutes or start it again.
+   ========================================================= */
+const fmtClock = s => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+const PlayTimer = {
+  use() { const u = store.get('timerUse', null); return u && u.day === dayKey() ? u : { day: dayKey(), used: 0 }; },
+  left() { return state.timerMin * 60 - this.use().used; },
+  isOver() { return !!(PID && state.timerMin && this.use().rang); },
+  init() { setInterval(() => this.tick(), 1000); this.render(); },
+  tick() {
+    if (PID && state.timerMin && state.startedAt && !document.hidden) {
+      const u = this.use();
+      if (!u.rang) {
+        u.used++;
+        const left = state.timerMin * 60 - u.used;
+        if (left <= 60 && !u.warned && state.timerMin > 1) { u.warned = true; Bell.ding(); toast('⏱️ נשארה עוד דקה אחת למשחק'); }
+        if (left <= 0) u.rang = true;
+        store.set('timerUse', u);
+        if (u.rang) timeUp();
+      }
+    }
+    this.render();
+  },
+  render() {
+    const el = $('#timer'); if (!el) return;
+    if (!PID || !state.timerMin) { el.hidden = true; return; }
+    const left = this.left();
+    el.hidden = false;
+    el.textContent = (left <= 0 ? '⏰ ' : '⏱️ ') + fmtClock(left);
+    el.classList.toggle('low', left > 0 && left <= 60);
+    el.classList.toggle('over', left <= 0);
+  },
+  restart() { store.set('timerUse', { day: dayKey(), used: 0 }); this.render(); },
+  // used may go below zero: left = timerMin*60 - used = exactly the minutes the parent added
+  extend(min) { store.set('timerUse', { day: dayKey(), used: (state.timerMin - min) * 60, warned: min <= 1 }); this.render(); },
+};
+function timeUp() {
+  Bell.ring();
+  try { if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]); } catch (e) {}
+  showTimeUp(true);
+}
+function showTimeUp(first) {
+  const m = $('#modal');
+  const bell = h('span', { class: 'sticker' }, '⏰');
+  const more = n => h('button', { class: 'btn secondary small', onclick: () => { PlayTimer.extend(n); m.hidden = true; } }, `➕ עוד ${n} דקות`);
+  m.innerHTML = '';
+  m.append(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' },
+    h('div', { class: 'prompt' }, 'הזמן של המשחק נגמר! 🔔'),
+    bell,
+    h('p', { class: 'sub' }, `${g('שיחקת', 'שיחקת')} היום ${state.timerMin} דקות. כל הכבוד! ההתקדמות נשמרה, ואפשר להמשיך בפעם הבאה מאותו מקום.`),
+    h('button', { class: 'btn green wide', onclick: () => { m.hidden = true; Home(); } }, 'סיום 👋'),
+    h('details', { class: 'parents', style: 'margin-top:12px;text-align:start' },
+      h('summary', null, 'להורים'),
+      h('div', { class: 'row' }, more(5), more(10)))));
+  m.hidden = false;
+  if (G) G.fromTo(bell, { rotation: -22 }, { rotation: 22, duration: .11, repeat: first ? 13 : 3, yoyo: true, ease: 'sine.inOut', onComplete() { G.set(bell, { rotation: 0 }); } });
+}
 
 /* =========================================================
    Router / screen frame
@@ -894,6 +1053,7 @@ let cleanup = null;
 function screen(title, showBack = true) {
   if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
   if (Speech.ok) try { speechSynthesis.cancel(); } catch (e) {}
+  Guard.unthink();
   $('#screenTitle').textContent = title;
   $('#backBtn').hidden = !showBack;
   const app = $('#app'); app.innerHTML = ''; window.scrollTo(0, 0);
@@ -925,6 +1085,7 @@ function sizeSlot(el, s) { el.style.width = s + 'px'; el.style.height = Math.rou
 function EndScreen(stageKey, earned, again, nextIdx) {
   state.done[lk(stageKey)] = true; store.set('done', state.done);
   Resume.clear();
+  Guard.reset();
   const app = screen('כל הכבוד!');
   const next = nextIdx != null ? STAGES[nextIdx] : null;
   const nextLevel = !next && stageKey !== 'review' && state.level < LEVELS.length ? LEVELS[state.level] : null;
@@ -963,6 +1124,7 @@ function goalBar() {
 }
 function Home() {
   if (!PID) return ProfilePicker();
+  Guard.reset();
   const app = screen('אותיות באנגלית', false);
   const lv = curLevel();
   const p = me();
@@ -981,7 +1143,7 @@ function Home() {
 
   const r = Resume.get();
   const resumeBtn = r && RESUME_RUN[r.stage] ? h('button', { class: 'resume', onclick: () => {
-    markStarted();
+    if (!canPlay()) return;
     state.level = r.level; store.set('level', r.level);
     if (r.caseMode) { state.caseMode = r.caseMode; store.set('case', r.caseMode); }
     RESUME_RUN[r.stage](r.data);
@@ -997,7 +1159,7 @@ function Home() {
   const letters = h('div', { class: 'level-letters en' }, lv.letters.split('').join(' '));
 
   const weakN = Mastery.weakLetters().length + Mastery.weakWords().length;
-  const review = weakN ? h('button', { class: 'stage review-card', onclick: () => { markStarted(); StageReview(); } },
+  const review = weakN ? h('button', { class: 'stage review-card', onclick: () => { if (canPlay()) StageReview(); } },
     h('span', { class: 'num' }, '🔁'),
     h('span', { class: 'txt' }, h('b', null, 'חזרה על מה שהיה קשה'), h('span', null, `${weakN} אותיות ומילים שכדאי לתרגל שוב`)),
     h('span', { class: 'got' }, '⭐ ' + stageStarsFor(state.level, 'review'))) : null;
@@ -1005,7 +1167,7 @@ function Home() {
   const list = h('div', { class: 'stage-list' }, STAGES.map((s, i) => {
     const got = stageStarsFor(state.level, s.key);
     const isDone = !!state.done[lk(s.key)];
-    return h('button', { class: 'stage', onclick: () => { markStarted(); s.run(); } },
+    return h('button', { class: 'stage', onclick: () => { if (canPlay()) s.run(); } },
       h('span', { class: 'num' }, s.icon),
       h('span', { class: 'txt' }, h('b', null, `${i + 1}. ${s.name}`), h('span', null, s.desc)),
       h('span', { class: 'got' }, isDone ? h('span', { class: 'ok' }, '✅') : null, '⭐ ' + got));
@@ -1024,8 +1186,10 @@ function Home() {
     h('p', null, 'כשמגיעים ליעד היומי מקבלים מדבקה לאלבום, ויום אחרי יום נבנה רצף 🔥. סופרים רק זמן שבו באמת נוגעים במסך.'),
     h('p', null, 'רמה 1: ', en('A–H'), '. רמה 2: ', en('I–P'), '. רמה 3: ', en('Q–Z'), '. המילים בכל רמה בנויות רק מאותיות שכבר נלמדו.'),
     h('p', null, 'ההתקדמות נשמרת רק בטלפון הזה ובדפדפן הזה, לכל ילד בנפרד. שום מידע לא נשלח לאינטרנט. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
+    timerSettings(),
     voiceSettings(),
     installHelp(),
+    updateBox(),
     h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
     h('button', { class: 'reset-btn', onclick: resetAll }, `איפוס ההתקדמות של ${p.name}`));
 
@@ -1044,6 +1208,81 @@ function resetAll() {
 /* =========================================================
    Voice settings (parents): pick the clearest English voice on this phone + speed
    ========================================================= */
+// re-draw the home screen but keep the parents area open on the card that was changed
+function reopenParents(id) {
+  Home();
+  const d = $('details.parents'); if (d) d.open = true;
+  const el = document.getElementById(id); if (el) el.scrollIntoView({ block: 'center' });
+}
+function timerSettings() {
+  const p = me();
+  const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'טיימר משחק' }, [0, 10, 15, 20, 30].map(mn =>
+    h('button', { class: mn === state.timerMin ? 'on' : '', onclick: () => {
+      state.timerMin = mn; store.set('timerMin', mn); PlayTimer.restart(); reopenParents('timerBox');
+    } }, mn ? `${mn}` : 'כבוי')));
+  const left = PlayTimer.left();
+  const status = !state.timerMin ? 'הטיימר כבוי.'
+    : PlayTimer.isOver() ? `⏰ הזמן של היום נגמר (${state.timerMin} דקות).`
+    : `נשארו היום ${fmtClock(left)} דקות מתוך ${state.timerMin}.`;
+  return h('div', { class: 'card', id: 'timerBox', style: 'margin:12px 0' },
+    h('b', null, `⏱️ טיימר משחק של ${p.name} (דקות)`),
+    h('div', { style: 'margin:8px 0' }, seg),
+    h('p', { style: 'margin:6px 0' }, status),
+    state.timerMin ? h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:6px' },
+      h('button', { class: 'btn secondary small', onclick: () => { PlayTimer.restart(); reopenParents('timerBox'); } }, '🔁 להתחיל מחדש'),
+      h('button', { class: 'btn secondary small', onclick: () => Bell.ring() }, '🔔 לשמוע את הצלצול')) : null,
+    h('p', { style: 'margin:8px 0 0;font-size:13px' }, 'הזמן נספר רק כשמשחקים והמשחק פתוח על המסך. דקה לפני הסוף יש צליל קטן, ובסוף יש צלצול והמשחק מבקש לסיים. הטיימר מתאפס כל יום. כדי לשמוע את הצלצול, מצב שקט בטלפון צריך להיות כבוי.'));
+}
+
+/* Version update. The build writes the version into the game and into version.json on the site.
+   "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
+   Progress lives in localStorage, so updating never touches it. */
+const APP_VERSION = '/*APP_VERSION*/', APP_BUILT = '/*APP_BUILT*/';
+const SITE = 'https://uriz1991.github.io/english-letters-game/';
+function updateBox() {
+  const fromFile = location.protocol === 'file:';
+  const status = h('p', { style: 'margin:8px 0 0' });
+  const act = h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:8px' });
+  const check = async () => {
+    status.textContent = '⏳ בודקים מול האתר...';
+    btn.disabled = true;
+    let remote = null;
+    try {
+      const r = await fetch((fromFile ? SITE : './') + 'version.json?t=' + Date.now(), { cache: 'no-store' });
+      if (r.ok) remote = await r.json();
+    } catch (e) {}
+    btn.disabled = false;
+    act.querySelectorAll('.upd-go').forEach(x => x.remove());
+    if (!remote || !remote.version) { status.textContent = '📡 אין חיבור לאתר כרגע. בדקו שיש אינטרנט ונסו שוב.'; return; }
+    if (remote.version === APP_VERSION) { status.textContent = '✅ זו הגרסה האחרונה.'; return; }
+    status.textContent = `🆕 יש גרסה חדשה (מ־${remote.built}).`;
+    act.append(fromFile
+      ? h('a', { class: 'btn green small upd-go', href: SITE, target: '_blank', rel: 'noopener' }, 'פתיחת הגרסה החדשה באתר')
+      : h('button', { class: 'btn green small upd-go', onclick: () => applyUpdate(remote.version) }, '⬇️ לעדכן עכשיו'));
+  };
+  const btn = h('button', { class: 'btn small', onclick: check }, '🔄 בדיקת עדכון');
+  act.append(btn);
+  return h('div', { class: 'card', id: 'updateBox', style: 'margin:12px 0' },
+    h('b', null, '🔄 עדכון גרסה'),
+    h('p', { style: 'margin:6px 0' }, 'הגרסה בטלפון: ', h('span', { dir: 'ltr' }, APP_BUILT), fromFile ? '. זה קובץ ששלחו, והוא לא מתעדכן לבד.' : ''),
+    act, status,
+    h('p', { style: 'margin:8px 0 0;font-size:13px' }, 'העדכון לא מוחק את ההתקדמות של הילדים.'));
+}
+async function applyUpdate(v) {
+  toast('⏳ מורידים את הגרסה החדשה...');
+  RAW.set('updTo', v);
+  try { for (const k of await caches.keys()) await caches.delete(k); } catch (e) {}
+  try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch (e) {}
+  for (const u of ['./', './index.html']) { try { await fetch(u, { cache: 'reload' }); } catch (e) {} }
+  location.reload();
+}
+// after the reload: tell the parent if it worked
+function afterUpdate() {
+  const want = RAW.get('updTo', null); if (!want) return;
+  RAW.del('updTo');
+  toast(want === APP_VERSION ? `✅ המשחק עודכן לגרסה החדשה (${APP_BUILT})` : '⏳ הגרסה החדשה עוד לא הגיעה לשרת. נסו שוב בעוד כמה דקות.');
+}
+
 function voiceSettings() {
   const box = h('div', { class: 'card', style: 'margin:12px 0' });
   if (!Speech.ok) { box.append(h('p', { style: 'margin:0' }, '🔊 הדפדפן הזה לא תומך בהקראה.')); return box; }
@@ -1223,6 +1462,10 @@ function ParentReport() {
       h('span', { class: 'n', style: 'color:var(--green-dark)' }, `${done}/${STAGES.length} שלבים`));
   }));
 
+  const weekGuess = days.reduce((a, d) => a + (state.guess[dayKey(d)] || 0), 0);
+  const guessEl = h('div', { class: 'card' },
+    h('p', { style: 'margin:0' }, h('b', null, weekGuess ? `🤔 ${weekGuess} סבבים השבוע היו עם הרבה ניחושים.` : '👍 השבוע כמעט לא היו ניחושים.')),
+    h('p', { style: 'margin:6px 0 0;font-size:14px' }, 'סבב עם הרבה תשובות שגויות ברצף נחשב ניחוש: לא מקבלים עליו כוכב, וההתקדמות לא נספרת. אחרי כמה ניחושים ברצף המשחק עוצר, מסביר, ונותן כמה שניות לחשוב לפני כל תשובה.'));
   const known = LETTERS.filter(x => Mastery.isKnown('L:' + x.L)).map(x => x.L);
   const weakL = LETTERS.filter(x => Mastery.isWeak('L:' + x.L)).map(x => x.L);
   const summary = () => [
@@ -1231,6 +1474,7 @@ function ParentReport() {
     `אותיות שכבר יודע/ת: ${known.join(' ') || 'עוד אין'}`,
     `אותיות שעוד מתאמנים: ${weakL.join(' ') || 'אין'}`,
     `מילים שהיו קשות: ${hard.filter(([k]) => Mastery.isWeak(k)).map(([k]) => k.slice(2)).join(', ') || 'אין'}`,
+    `סבבים עם הרבה ניחושים השבוע: ${weekGuess}`,
   ].join('\n');
   const share = async () => {
     const text = summary();
@@ -1251,6 +1495,7 @@ function ParentReport() {
     h('div', { class: 'sec-title' }, 'אותיות'),
     letterGrid(), legend(),
     h('div', { class: 'sec-title' }, 'מילים שהיו קשות'), hardList,
+    h('div', { class: 'sec-title' }, 'ניחושים'), guessEl,
     h('div', { class: 'sec-title' }, 'אותיות מראה ', en('b d p q')), mirrorEl,
     h('div', { class: 'sec-title' }, 'שלבים שהושלמו'), stagesEl,
     h('p', { class: 'sub', style: 'margin-top:14px' }, 'מילה או אות נחשבות "ידועות" אחרי שתי תשובות נכונות ברצף בניסיון הראשון. מה שהיה קשה חוזר לבד בסבבים הבאים, ויש לו גם כפתור "חזרה" בתפריט.'),
@@ -1285,7 +1530,7 @@ function StageListen(res) {
     const show = L => lower ? L.toLowerCase() : L;
     const others = shuffle(pool.map(x => x.L).filter(x => x !== item.L)).slice(0, 2);
     const options = shuffle([item.L, ...others]);
-    let solved = false, firstTry = true;
+    let solved = false, firstTry = true; Guard.start();
     const sayWord = () => Speech.en(kw.w, .7);
 
     const reveal = h('div', { class: 'word-reveal en' });
@@ -1304,7 +1549,7 @@ function StageListen(res) {
       b.addEventListener('click', () => {
         if (solved) return;
         if (L === item.L) {
-          solved = true; b.classList.add('right'); pop(b); burst(b); addStar(SK); earned++;
+          solved = true; b.classList.add('right'); pop(b); burst(b); earned += Guard.star(SK);
           Mastery.rec('L:' + item.L, firstTry);
           const shown = lower ? kw.w : kw.w.toUpperCase();
           reveal.innerHTML = '';
@@ -1318,7 +1563,7 @@ function StageListen(res) {
           Speech.en(kw.w, .7);
           save(round + 1 < ROUNDS ? round + 1 : round);
         } else {
-          b.classList.add('wrong'); shake(b); firstTry = false;
+          b.classList.add('wrong'); shake(b); firstTry = false; Guard.miss();
           msg.textContent = 'כמעט! ' + g('הקשב', 'הקשיבי') + (atEnd ? ' לצליל האחרון ' : ' לצליל הראשון ') + g('ונסה', 'ונסי') + ' שוב 🙂';
           sayWord();
         }
@@ -1422,7 +1667,7 @@ function MirrorChallenge(earnedBefore = 0, res) {
     const app = screen('אתגר אותיות מראה');
     const [L, wi] = items[round];
     const it = MIRROR_WORDS[L][wi];
-    let solved = false, firstTry = true;
+    let solved = false, firstTry = true; Guard.start();
     const sayWord = () => Speech.en(it.w, .7);
     const hint = h('div', { class: 'hint mirror-hint' },
       h('div', { class: 'letters en' }, set.map(x => h('span', null, x))),
@@ -1439,14 +1684,14 @@ function MirrorChallenge(earnedBefore = 0, res) {
       b.addEventListener('click', () => {
         if (solved) return;
         if (x === L) {
-          solved = true; b.classList.add('right'); pop(b); burst(b); addStar('pairs'); earned++;
+          solved = true; b.classList.add('right'); pop(b); burst(b); earned += Guard.star('pairs');
           Mastery.rec('M:' + L, firstTry);
           reveal.innerHTML = ''; reveal.append(h('b', null, it.w[0]), it.w.slice(1));
           pop(reveal); msg.textContent = `נכון! ${it.he} 🎉`;
           nextBtn.classList.remove('hidden'); sayWord();
           Resume.save('mirror', { items, round: round + 1 < ROUNDS ? round + 1 : round, earned });
         } else {
-          b.classList.add('wrong'); shake(b); pop(hint); firstTry = false;
+          b.classList.add('wrong'); shake(b); pop(hint); firstTry = false; Guard.miss();
           msg.textContent = 'כמעט! ' + g('הסתכל', 'הסתכלי') + ' על הכללים למעלה ' + g('ונסה', 'ונסי') + ' שוב 🙂';
           sayWord();
         }
@@ -1485,7 +1730,7 @@ function StageBuild(res) {
     const distract = shuffle(knownABC().map(fmt).filter(x => !letters.includes(x))).slice(0, 2);
     const tiles = shuffle([...letters, ...distract]).map(ch => ({ ch, used: false, el: null }));
     const slots = letters.map(() => null);
-    let solved = false, busy = false, firstTry = true;
+    let solved = false, busy = false, firstTry = true; Guard.start();
     const sayWord = () => Speech.en(item.w, .7);
     const size = slotSizeFor(letters.length);
 
@@ -1530,7 +1775,7 @@ function StageBuild(res) {
       if (!wrong.length) {
         solved = true;
         slotEls.forEach(el => { el.classList.add('ok'); el.classList.remove('next'); });
-        burst(slotEls[slotEls.length >> 1], 18); addStar(SK); earned++;
+        burst(slotEls[slotEls.length >> 1], 18); earned += Guard.star(SK, 3);
         Mastery.rec('W:' + item.w, firstTry);
         msg.innerHTML = ''; msg.append('נכון! ', en(fmt(item.w)), ` = ${item.he} 🎉`);
         const t = tipEl(item.tip); if (t) { extra.append(t); enter(t); }
@@ -1539,7 +1784,7 @@ function StageBuild(res) {
         saveAt(round + 1 < ROUNDS ? round + 1 : round);
         return;
       }
-      busy = true; firstTry = false;
+      busy = true; firstTry = false; Guard.miss();
       wrong.forEach(i => { slotEls[i].classList.add('bad'); shake(slotEls[i]); });
       msg.textContent = 'כמעט! האותיות באדום לא במקום. ' + g('נסה', 'נסי') + ' שוב 🙂';
       sayWord();
@@ -1601,7 +1846,7 @@ function StageMissing(res) {
     const otherVowels = knownVowels.map(fmt).filter(x => x !== answer);
     const distract = isVowel ? [pick(otherVowels), pick(consonants)] : shuffle(known.map(fmt).filter(x => x !== answer)).slice(0, 2);
     const options = shuffle([answer, ...distract]);
-    let solved = false, firstTry = true;
+    let solved = false, firstTry = true; Guard.start();
     const sayWord = () => Speech.en(item.w, .7);
     const size = slotSizeFor(letters.length);
 
@@ -1620,7 +1865,7 @@ function StageMissing(res) {
         if (L === answer) {
           solved = true; b.classList.add('right');
           blank.textContent = answer; blank.classList.remove('blank'); slotEls.forEach(s => s.classList.add('ok'));
-          pop(blank); burst(blank, 16); addStar('missing'); earned++;
+          pop(blank); burst(blank, 16); earned += Guard.star('missing');
           Mastery.rec('W:' + item.w, firstTry);
           msg.innerHTML = ''; msg.append('נכון! ', en(fmt(item.w)), ` = ${item.he} 🎉`);
           if (isVowel) { const v = h('div', { class: 'hint green' }, '👏 בלי האות ', en(answer), ' המילה לא שלמה. באנגלית התנועה היא אות!'); extra.append(v); enter(v); }
@@ -1629,7 +1874,7 @@ function StageMissing(res) {
           sayWord();
           saveAt(round + 1 < ROUNDS ? round + 1 : round);
         } else {
-          b.classList.add('wrong'); shake(b); firstTry = false;
+          b.classList.add('wrong'); shake(b); firstTry = false; Guard.miss();
           blank.textContent = L; blank.classList.add('bad'); shake(blank);
           msg.textContent = 'כמעט! ' + g('הקשב', 'הקשיבי') + ' למילה ' + g('ונסה', 'ונסי') + ' אות אחרת 🙂';
           sayWord();
@@ -2044,7 +2289,7 @@ function StageRead(res) {
     const app = screen('קוראים מילה');
     const item = list[round];
     const gs = graphemes(item.w);
-    let k = 0, solved = false, firstTry = true;
+    let k = 0, solved = false, firstTry = true; Guard.start();
     const msg = h('p', { class: 'sub' }, g('לחץ', 'לחצי') + ' על האותיות לפי הסדר, משמאל לימין, ' + g('ותראה', 'ותראי') + ' איך כל אחת נשמעת.');
     const blend = h('div', { class: 'blend', dir: 'rtl' });
     const ask = h('div', { class: 'hidden' });
@@ -2079,7 +2324,7 @@ function StageRead(res) {
       b.addEventListener('click', () => {
         if (solved) return;
         if (o === item) {
-          solved = true; b.classList.add('right'); pop(b); burst(b); addStar('read'); earned++;
+          solved = true; b.classList.add('right'); pop(b); burst(b); earned += Guard.star('read');
           Mastery.rec('W:' + item.w, firstTry);
           msg.innerHTML = ''; msg.append(g('קראת', 'קראת') + ': ', en(fmt(item.w)), ` = ${item.he} 🎉`);
           const t = tipEl(item.tip); if (t) { extra.append(t); enter(t); }
@@ -2087,7 +2332,7 @@ function StageRead(res) {
           Speech.en(item.w, .7);
           saveAt(round + 1 < ROUNDS ? round + 1 : round);
         } else {
-          b.classList.add('wrong'); shake(b); firstTry = false;
+          b.classList.add('wrong'); shake(b); firstTry = false; Guard.miss();
           msg.textContent = 'כמעט! ' + g('קרא', 'קראי') + ' שוב את הצלילים למעלה 🙂';
         }
       });
@@ -2194,7 +2439,7 @@ function StageTalk(res) {
     saveAt(round);
     const app = screen('מדברים');
     const item = list[round], kind = kinds[round];
-    let solved = false, firstTry = true, onWin = null;
+    let solved = false, firstTry = true, onWin = null; Guard.start();
     const say = () => sayPhrase(item.p);
     const msg = h('p', { class: 'sub' });
     const card = h('div');
@@ -2204,7 +2449,7 @@ function StageTalk(res) {
     function win(el) {
       solved = true; if (el) { el.classList.add('right'); pop(el); burst(el); }
       if (onWin) onWin();
-      addStar('talk'); earned++;
+      earned += Guard.star('talk');
       Mastery.rec('P:' + item.p, firstTry);
       msg.textContent = 'נכון! 🎉';
       const reply = item.reply ? h('p', null, '💬 עונים: ', en(item.reply), ear(item.reply, 'mini-ear'), h('br'), heOf(item.replyHe)) : null;
@@ -2220,7 +2465,7 @@ function StageTalk(res) {
       setTimeout(() => nextBtn.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
     }
     function miss(el, ...parts) {
-      firstTry = false;
+      firstTry = false; Guard.miss();
       if (el) { el.classList.add('wrong'); shake(el); }
       msg.innerHTML = ''; msg.append(...parts);
     }
@@ -2258,7 +2503,7 @@ function StageTalk(res) {
         const b = h('button', { class: 'chip en', type: 'button' }, w);
         b.addEventListener('click', () => {
           if (solved) return;
-          if (w !== words[k]) { firstTry = false; shake(b); msg.textContent = 'לא המילה הזו. ' + g('הקשב', 'הקשיבי') + ' שוב 🙂'; say(); return; }
+          if (w !== words[k]) { firstTry = false; Guard.miss(); shake(b); msg.textContent = 'לא המילה הזו. ' + g('הקשב', 'הקשיבי') + ' שוב 🙂'; say(); return; }
           b.classList.add('used');
           const placed = h('span', { class: 'chip en placed' }, w); line.append(placed); pop(placed);
           k++;
@@ -2295,8 +2540,10 @@ STAGES.push(
 Profiles.migrate();
 { const act = RAW.get('active', null); if (act && Profiles.get(act)) loadProfile(act); }
 Activity.init();
+PlayTimer.init();
 renderStars();
 Home();
+afterUpdate();
 
 // Install as an app + offline, only when served from the website (not from a WhatsApp file)
 if (/^https?:$/.test(location.protocol)) {
