@@ -41,13 +41,13 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 .map-go{display:flex;align-items:center;gap:12px;width:100%;margin:12px 0 4px;padding:14px 16px;border:0;border-radius:20px;background:linear-gradient(135deg,#2f80ed,#7b61ff);color:#fff;text-align:start;box-shadow:0 5px 0 #1d5bb8;font:inherit}
 .map-go .ic{font-size:34px}.map-go b{display:block;font-size:21px}.map-go span span{font-size:14px;opacity:.95}
 .map-head{display:flex;justify-content:space-between;align-items:center;margin:4px 2px 10px;font-size:17px}
-.map-list{display:flex;flex-direction:column;gap:8px}
-.map-phase{margin:14px 2px 2px;font-weight:800;color:var(--ink)}
-.map-st{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;border:2px solid var(--line,#e6dccb);background:var(--card,#fff);text-align:start;font:inherit;color:inherit}
-.map-st .ic{font-size:26px;width:34px;text-align:center}.map-st .txt{flex:1}.map-st small{display:block;opacity:.75}
-.map-st .got{color:#f5a623;font-weight:800;white-space:nowrap}
-.map-st.now{border-color:#2f80ed;box-shadow:0 0 0 3px rgba(47,128,237,.25)}.map-st.now .got{color:#2f80ed}
-.map-st.locked{opacity:.5}.map-st.quiz:not(.locked){border-style:dashed}
+.map-world{margin:0 -16px -40px;line-height:0}
+.map-svg{display:block;width:100%;height:auto;font-family:inherit}
+.map-svg .ms{cursor:pointer;outline:none}.map-svg .ms-locked{cursor:default}
+.map-svg .ms:focus-visible .mbody{stroke:#2f80ed;stroke-width:3}
+.map-bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;justify-content:center;padding:10px 16px max(12px,env(safe-area-inset-bottom));pointer-events:none}
+.map-play{pointer-events:auto;display:flex;align-items:center;gap:12px;width:100%;max-width:488px;padding:12px 18px;font-size:19px;text-align:start}
+.map-play .ic{font-size:30px}.map-play b{display:block}.map-play small{display:block;font-size:14px;font-weight:600;opacity:.95}
 .map-stars{font-size:40px;letter-spacing:6px;color:#d8d0c2}.map-stars .on{color:#f5a623}
 .pts-track{position:relative;height:14px;border-radius:99px;background:#eee4d4;margin:6px auto 12px;max-width:320px;overflow:visible}
 .pts-track i{position:absolute;inset:0 0 0 auto;border-radius:99px;background:linear-gradient(90deg,#3ac569,#2f80ed)}
@@ -1324,7 +1324,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = '7ce7b1f8', APP_BUILT = '13.11.2026 01:27';
+const APP_VERSION = '357da765', APP_BUILT = '13.11.2026 13:32';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -3096,27 +3096,177 @@ function LeaderBoard() {
   enter($('.board', app));
 }
 
-// step 1: the map as a simple list (the drawn map comes next)
+/* The drawn map: one winding path from the bottom up, drawn in code so it never runs out.
+   Every 10 stations the land changes (sunny meadow, river valley, autumn wood, glowing night forest)
+   and then the cycle starts over, so any number of new stations gets its own scenery for free. */
+const MAP_W = 360, MAP_GAP = 96;
+const BIOMES = [
+  { ground: '#9BD66B', spot: '#B6E486', path: '#F4DDA8', edge: '#D3AE6C', dots: 'rgba(255,255,255,.55)', deco: ['pine', 'pine', 'bush', 'flower', 'rock', 'flower'], land: 'house' },
+  { ground: '#82C96F', spot: '#A2DA8C', path: '#EECD94', edge: '#C29659', dots: 'rgba(255,255,255,.5)', deco: ['tree', 'tree', 'bush', 'rock', 'flower'], land: 'river' },
+  { ground: '#BCCB66', spot: '#D6DB8C', path: '#EDC58A', edge: '#B78849', dots: 'rgba(255,255,255,.5)', deco: ['fall', 'fall', 'fall', 'bush', 'rock'], land: 'mill' },
+  { ground: '#1E3F50', spot: '#285468', path: '#3A6A7B', edge: '#132E3B', dots: '#C6F7FF', deco: ['dpine', 'dpine', 'shroom', 'shroom', 'fly', 'fly', 'fly'], land: 'stump', dark: true },
+];
+const biomeIx = i => Math.floor(i / 10) % BIOMES.length;
+function seeded(seed) { let a = (seed * 9301 + 49297) >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const pathX = t => MAP_W / 2 + 92 * Math.sin(t * 0.85 + 0.6);
+const STAR_PTS = (() => { const p = []; for (let k = 0; k < 10; k++) { const r = k % 2 ? 3.2 : 7.5, a = -Math.PI / 2 + k * Math.PI / 5; p.push((r * Math.cos(a)).toFixed(1) + ',' + (r * Math.sin(a)).toFixed(1)); } return p.join(' '); })();
+const escSvg = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// one decoration, standing on the point (x, y)
+function decoSvg(kind, x, y, s, r) {
+  const at = (inner, sh = 14) => `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${s.toFixed(2)})"><ellipse cx="0" cy="2" rx="${sh}" ry="4" fill="rgba(0,0,0,.14)"/>${inner}</g>`;
+  const pine = (a, b) => at(`<rect x="-3" y="-10" width="6" height="12" rx="2" fill="#7A5230"/><path d="M0-50L17-22H-17Z M0-36L21-8H-21Z" fill="${a}"/><path d="M0-50L17-22H0Z M0-36L21-8H0Z" fill="${b}"/>`);
+  const round = (a, b) => at(`<rect x="-3.5" y="-16" width="7" height="18" rx="2" fill="#7A5230"/><circle cx="0" cy="-30" r="17" fill="${a}"/><circle cx="-7" cy="-22" r="11" fill="${a}"/><circle cx="8" cy="-23" r="10" fill="${a}"/><circle cx="-5" cy="-36" r="7" fill="${b}"/>`, 16);
+  switch (kind) {
+    case 'pine': return pine('#2F9154', '#257A45');
+    case 'dpine': return pine('#174A47', '#103A38');
+    case 'tree': return round('#4DAE52', '#71C46F');
+    case 'fall': { const c = [['#E8843A', '#F3A35E'], ['#D7524A', '#E87A6E'], ['#EFB33B', '#F7CF6E']][Math.floor(r * 3)]; return round(c[0], c[1]); }
+    case 'bush': return at(`<circle cx="-9" cy="-7" r="9" fill="#4FA94A"/><circle cx="9" cy="-7" r="9" fill="#4FA94A"/><circle cx="0" cy="-12" r="11" fill="#5DBB55"/><circle cx="-3" cy="-16" r="4" fill="#7ED273"/>`, 16);
+    case 'rock': return at(`<ellipse cx="0" cy="-6" rx="13" ry="9" fill="#A7A39B"/><ellipse cx="-3" cy="-9" rx="6" ry="3.5" fill="#C9C5BC"/>`, 13);
+    case 'flower': { const c = ['#FF6B8A', '#FFD23F', '#FFFFFF', '#B57BFF'][Math.floor(r * 4)]; return at(`<path d="M0 0V-10" stroke="#3E8E3E" stroke-width="2"/><circle cx="-4" cy="-12" r="3.5" fill="${c}"/><circle cx="4" cy="-12" r="3.5" fill="${c}"/><circle cx="0" cy="-16" r="3.5" fill="${c}"/><circle cx="0" cy="-8" r="3.5" fill="${c}"/><circle cx="0" cy="-12" r="2.5" fill="#F7A400"/>`, 6); }
+    case 'shroom': { const c = r < .5 ? '#5BE3F2' : '#F26DB5'; return at(`<rect x="-3" y="-12" width="6" height="13" rx="3" fill="#E7E0CF"/><path d="M-13-11Q0-30 13-11Z" fill="${c}" filter="url(#mglow)"/><circle cx="-4" cy="-17" r="1.8" fill="#fff"/><circle cx="4" cy="-15" r="1.5" fill="#fff"/>`, 10); }
+    case 'fly': return `<circle class="mfly" cx="${x.toFixed(1)}" cy="${(y - 20).toFixed(1)}" r="2.6" fill="#FFF3A0" filter="url(#mglow)"/>`;
+  }
+  return '';
+}
+// the landmark of each land: a cottage, a waterfall, a windmill, a glowing tree-stump house
+function landSvg(kind, x, y) {
+  const g = inner => `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><ellipse cx="0" cy="3" rx="34" ry="7" fill="rgba(0,0,0,.15)"/>${inner}</g>`;
+  if (kind === 'house') return g(`<rect x="-24" y="-34" width="48" height="36" fill="#FFF1D6"/><path d="M-32-32L0-58L32-32Z" fill="#E0533D"/><path d="M0-58L32-32H0Z" fill="#C4432F"/><rect x="-7" y="-18" width="14" height="20" rx="3" fill="#8A5A2F"/><rect x="-20" y="-26" width="10" height="9" fill="#7CC8F2"/><rect x="11" y="-26" width="10" height="9" fill="#7CC8F2"/><rect x="14" y="-56" width="7" height="14" fill="#9C6B44"/>`);
+  if (kind === 'mill') return g(`<path d="M-14 2L-9-44H9L14 2Z" fill="#F2E3C4"/><path d="M0-44H9L14 2H0Z" fill="#E1CDA6"/><path d="M-12-44L0-56L12-44Z" fill="#9C5B33"/><rect x="-5" y="-14" width="10" height="16" rx="5" fill="#8A5A2F"/><g transform="translate(0 -46)"><g class="mblade"><rect x="-2" y="-34" width="4" height="68" fill="#7A5230"/><rect x="-34" y="-2" width="68" height="4" fill="#7A5230"/><rect x="2" y="-32" width="9" height="24" fill="#FFF8E8"/><rect x="-11" y="8" width="9" height="24" fill="#FFF8E8"/><rect x="8" y="2" width="24" height="9" fill="#FFF8E8"/><rect x="-32" y="-11" width="24" height="9" fill="#FFF8E8"/><circle r="4" fill="#5E3A17"/></g></g>`);
+  if (kind === 'stump') return g(`<path d="M-26 2Q-28-30-22-44H22Q28-30 26 2Z" fill="#6B4A2E"/><ellipse cx="0" cy="-44" rx="22" ry="7" fill="#8A6542"/><ellipse cx="0" cy="-44" rx="14" ry="4" fill="#A57E57"/><path d="M-8 2V-16Q0-26 8-16V2Z" fill="#FFD66B" filter="url(#mglow)"/><circle cx="13" cy="-28" r="5" fill="#FFD66B" filter="url(#mglow)"/><path d="M-30-48Q-18-70 0-62Q18-74 30-50Z" fill="#2E6B4F"/>`);
+  return '';
+}
+
 function MapScreen() {
   endRun();
-  const m = mapState();
+  const m = mapState(), at = m.at, kid = me();
   const app = screen('המפה');
   app.append(h('div', { class: 'map-head' }, h('b', null, `⭐ ${mapStars(m)} כוכבים במפה`),
-    h('button', { class: 'btn small', onclick: () => LeaderBoard() }, '🏆 טבלה'), h('span', null, `תחנה ${m.at + 1}`)));
-  const list = h('div', { class: 'map-list' });
-  let phase = 0;
-  for (let i = 0; i <= m.at + 5; i++) {
-    const s = stationAt(i);
-    if (s.phase !== phase) { phase = s.phase; list.append(h('div', { class: 'map-phase' }, `שלב ${phase}: ${PHASES[phase]}`)); }
-    const st = i < m.at ? 'done' : i === m.at ? 'now' : 'locked';
-    const best = m.best[i] || 0;
-    list.append(h('button', { class: `map-st ${st}${s.quiz ? ' quiz' : ''}`, disabled: st === 'locked', onclick: () => startStation(i) },
-      h('span', { class: 'ic' }, st === 'locked' ? '🔒' : KIND[s.kind].icon),
-      h('span', { class: 'txt' }, h('b', null, `${i + 1}. ${stationTitle(s)}`), s.tag ? h('small', { class: /^[A-Z ]+$/.test(s.tag) ? 'en' : '' }, s.tag) : null),
-      h('span', { class: 'got' }, st === 'now' ? 'עכשיו ▶' : st === 'done' ? '★'.repeat(best) + '☆'.repeat(3 - best) : '')));
+    h('button', { class: 'btn small', onclick: () => LeaderBoard() }, '🏆 טבלה'), h('span', null, `תחנה ${at + 1}`)));
+
+  const start = Math.max(0, at - 40), end = at + 12, TOP = 230, BOT = 240;
+  const H = TOP + (end - start) * MAP_GAP + BOT;
+  const Y = t => H - BOT - (t - start) * MAP_GAP, T = y => start + (H - BOT - y) / MAP_GAP;
+  const out = [], under = [], stuff = [];
+  // ground: a field per land, blended into the next one
+  const c0 = Math.floor(start / 10), c1 = Math.floor(end / 10) + 1;
+  const grads = BIOMES.map((b, k) => `<linearGradient id="mg${k}" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${BIOMES[(k + BIOMES.length - 1) % BIOMES.length].ground}"/><stop offset="1" stop-color="${b.ground}"/></linearGradient>`).join('');
+  out.push(`<defs>${grads}<filter id="mglow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="2.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="mfog" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".97"/><stop offset=".55" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>`);
+  for (let c = c0; c <= c1; c++) {
+    const k = c % BIOMES.length, b = BIOMES[k];
+    const yb = c === c0 ? H : Y(c * 10 - .5), yt = c === c1 ? 0 : Math.max(0, Y(c * 10 + 9.5));
+    if (yb <= 0) continue;
+    out.push(`<rect x="0" y="${yt.toFixed(1)}" width="${MAP_W}" height="${(yb - yt).toFixed(1)}" fill="${b.ground}"/>`);
+    if (c > c0) out.push(`<rect x="0" y="${(yb - 60).toFixed(1)}" width="${MAP_W}" height="120" fill="url(#mg${k})"/>`);
+    const R = seeded(c + 1);
+    for (let n = 0; n < 7; n++) out.push(`<ellipse cx="${(R() * MAP_W).toFixed(0)}" cy="${(yt + R() * (yb - yt)).toFixed(0)}" rx="${(30 + R() * 50).toFixed(0)}" ry="${(14 + R() * 18).toFixed(0)}" fill="${b.spot}" opacity=".6"/>`);
+    // river valley: a river crossing under a wooden bridge, falling in from a cliff on the side
+    let riverY = null;
+    if (b.land === 'river') {
+      riverY = Y(c * 10 + 4.5);
+      const bx = pathX(c * 10 + 4.5), side = bx > MAP_W / 2 ? 0 : MAP_W;
+      // the river passes exactly under the bridge, where the path crosses it
+      const rAt = x => riverY + 16 * Math.sin((x - bx) / 58), wpts = [];
+      for (let x = -30; x <= MAP_W + 30; x += 8) wpts.push(`${x} ${rAt(x).toFixed(1)}`);
+      const wave = 'M' + wpts.join('L');
+      under.push(`<path d="${wave}" stroke="#3B8FC0" stroke-width="58" fill="none"/><path d="${wave}" stroke="#56B6EA" stroke-width="46" fill="none"/><path class="mflow" d="${wave}" stroke="#BDE8FF" stroke-width="3" stroke-dasharray="16 26" stroke-linecap="round" fill="none"/>`);
+      const fx = side === 0 ? 34 : MAP_W - 34, fy = rAt(fx) + 4;
+      under.push(`<g transform="translate(${fx} ${fy})"><path d="M-36-96Q-40-60-28-30H28Q40-60 36-96Z" fill="#8F8A83"/><path d="M-36-96Q-20-110 0-102Q22-112 36-96Q30-86 0-90Q-26-86-36-96Z" fill="#5DBB55"/><rect x="-14" y="-92" width="28" height="70" fill="#7FCBF2"/><path class="mfall" d="M-10-90V-24M0-90V-24M10-90V-24" stroke="#E8F7FF" stroke-width="3" stroke-dasharray="10 12"/><ellipse cx="0" cy="-22" rx="24" ry="8" fill="#E8F7FF" opacity=".9"/></g>`);
+      const tilt = Math.atan2(92 * .85 * Math.cos((c * 10 + 4.5) * .85 + .6), MAP_GAP) * 180 / Math.PI;
+      stuff.push({ y: riverY + 22, svg: `<g transform="translate(${bx.toFixed(1)} ${riverY.toFixed(1)}) rotate(${tilt.toFixed(1)})"><rect x="-26" y="-34" width="52" height="68" rx="4" fill="#A0703C"/>${[-26, -12, 2, 16].map(v => `<rect x="-26" y="${v}" width="52" height="3" fill="#7A5230"/>`).join('')}<rect x="-30" y="-36" width="6" height="72" rx="3" fill="#6B4423"/><rect x="24" y="-36" width="6" height="72" rx="3" fill="#6B4423"/></g>`, top: true });
+    }
+    // the landmark, on the side away from the path
+    const lt = c * 10 + 7.2, ly = Y(lt);
+    if (b.land !== 'river' && ly > TOP && ly < H) stuff.push({ y: ly, svg: landSvg(b.land, pathX(lt) > MAP_W / 2 ? 62 : MAP_W - 62, ly) });
+    const lx = pathX(lt) > MAP_W / 2 ? 62 : MAP_W - 62;
+    // trees, rocks, flowers, mushrooms, fireflies: never on the path, the river or the landmark
+    for (let n = 0; n < 34; n++) {
+      const x = 10 + R() * (MAP_W - 20), y = yt + 20 + R() * (yb - yt - 20), kind = b.deco[Math.floor(R() * b.deco.length)], s = .75 + R() * .45, rr = R();
+      if (y > H - 10 || y < TOP - 60) continue;
+      if (Math.abs(x - pathX(T(y))) < 46 || Math.abs(x - pathX(T(y + 30))) < 40) continue;
+      if (riverY !== null && Math.abs(y - riverY) < 46) continue;
+      if (b.land !== 'river' && Math.abs(x - lx) < 50 && Math.abs(y - ly) < 70) continue;
+      stuff.push({ y, svg: decoSvg(kind, x, y, s, rr) });
+    }
   }
-  app.append(list);
-  const now = $('.map-st.now', list); if (now) now.scrollIntoView({ block: 'center' });
+  // the path itself, one stretch per land in that land's colours
+  for (let c = c0; c <= c1; c++) {
+    const b = BIOMES[c % BIOMES.length], pts = [];
+    for (let t = Math.max(start - 1.6, c * 10 - .8); t <= Math.min(end + 2.5, c * 10 + 9.8); t += .1) pts.push(`${pathX(t).toFixed(1)} ${Y(t).toFixed(1)}`);
+    if (pts.length < 2) continue;
+    const d = 'M' + pts.join('L');
+    under.push(`<path d="${d}" stroke="${b.edge}" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="${d}" stroke="${b.path}" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`);
+    under.push(`<path d="${d}" stroke="${b.dots}" stroke-width="5" stroke-dasharray="0 17" stroke-linecap="round" fill="none"${b.dark ? ' filter="url(#mglow)"' : ''}/>`);
+  }
+  // a wooden sign where each part of the journey begins
+  for (let i = start; i <= end; i++) {
+    const s = stationAt(i);
+    if (i > 0 && stationAt(i - 1).phase === s.phase) continue;
+    const sx = pathX(i + .45) > MAP_W / 2 ? 84 : MAP_W - 84, sy = Y(i + .45);
+    stuff.push({ y: sy + 26, svg: `<g transform="translate(${sx} ${sy})"><rect x="-4" y="0" width="8" height="26" fill="#6B4423"/><rect x="-74" y="-30" width="148" height="44" rx="8" fill="#8B5A2B"/><rect x="-70" y="-26" width="140" height="36" rx="6" fill="#A86F38"/><text x="0" y="-11" text-anchor="middle" direction="rtl" font-size="13" font-weight="800" fill="#FFF4DC">שלב ${s.phase}</text><text x="0" y="5" text-anchor="middle" direction="rtl" font-size="11.5" font-weight="700" fill="#FFE7B8">${escSvg(PHASES[s.phase])}</text></g>` });
+  }
+  if (start === 0) stuff.push({ y: Y(0) + 80, svg: `<g transform="translate(${pathX(-.6).toFixed(1)} ${Y(-.75).toFixed(1)})"><rect x="-38" y="-14" width="76" height="28" rx="14" fill="#fff" opacity=".9"/><text x="0" y="5" text-anchor="middle" direction="rtl" font-size="14" font-weight="800" fill="#2E7D32">🚩 התחלה</text></g>` });
+  stuff.sort((a, b) => a.y - b.y);
+
+  // the stations
+  const st = [];
+  for (let i = start; i <= end; i++) {
+    const s = stationAt(i), x = pathX(i), y = Y(i), dark = BIOMES[biomeIx(i)].dark;
+    const kind = i < at ? 'done' : i === at ? 'now' : 'locked', best = m.best[i] || 0;
+    const label = `תחנה ${i + 1}: ${stationTitle(s)}` + (kind === 'done' ? `, ${best} כוכבים` : kind === 'locked' ? ', נעולה' : ', התחנה שלך');
+    const face = s.kind === 'chest' ? `<text y="8" text-anchor="middle" font-size="24">🎁</text>`
+      : `<text y="6.5" text-anchor="middle" font-size="${i >= 99 ? 14 : 17}" font-weight="800" fill="${kind === 'done' ? '#7A4A06' : kind === 'now' ? '#fff' : dark ? '#D5E8EE' : '#6F685C'}">${i + 1}</text>`;
+    const disc = kind === 'done' ? `<circle r="22" fill="#F7C948" stroke="#B9790F" stroke-width="4"/><circle r="15.5" fill="none" stroke="#FFE38A" stroke-width="2"/>`
+      : kind === 'now' ? `<circle class="mring" r="27" fill="none" stroke="#FFF3B0" stroke-width="7"/><circle r="26" fill="#FF8A3D" stroke="#C2551A" stroke-width="4"/><circle r="19" fill="none" stroke="#FFB27A" stroke-width="2"/>`
+      : `<circle r="21" fill="${dark ? '#56717D' : '#CFC8BB'}" stroke="${dark ? '#34505C' : '#958D80'}" stroke-width="4"/>`;
+    const stars = kind === 'done' ? [-16, 0, 16].map((dx, k) => `<polygon transform="translate(${dx} ${k === 1 ? -35 : -31})" points="${STAR_PTS}" fill="${k < best ? '#FFD23F' : dark ? '#4A6470' : '#E2DACB'}" stroke="${k < best ? '#B9790F' : dark ? '#33505C' : '#B8AE9C'}" stroke-width="1.5"/>`).join('') : '';
+    const flag = s.quiz ? `<text x="20" y="-16" font-size="17">🏁</text>` : '';
+    const meTag = kind === 'now' ? `<g class="mme"><path d="M-6-37L0-29L6-37Z" fill="#fff"/><circle cy="-54" r="19" fill="#fff" stroke="#FF8A3D" stroke-width="4"/><text y="-46" text-anchor="middle" font-size="22">${escSvg(kid ? kid.avatar : '⭐')}</text></g>` : '';
+    st[kind === "now" ? "unshift" : "push"](`<g class="ms ms-${kind}" data-i="${i}" role="button" tabindex="${kind === 'locked' ? -1 : 0}" aria-label="${escSvg(label)}" aria-disabled="${kind === 'locked'}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><ellipse cy="15" rx="24" ry="7" fill="rgba(0,0,0,.2)"/><circle r="34" fill="transparent"/><g class="mbody">${disc}${face}</g>${stars}${flag}${meTag}</g>`);
+  }
+  // fog over what is still far ahead: the path keeps going, there is always more
+  const fogTo = Y(end - 2.5);
+  const clouds = [[60, 70, 54], [170, 50, 66], [290, 78, 58], [110, 140, 44], [250, 150, 50]].map(([x, y, r]) => `<g opacity=".95"><circle cx="${x}" cy="${y}" r="${r * .6}" fill="#fff"/><circle cx="${x - r * .55}" cy="${y + 10}" r="${r * .42}" fill="#fff"/><circle cx="${x + r * .55}" cy="${y + 8}" r="${r * .45}" fill="#fff"/></g>`).join('');
+  const fog = `<rect x="0" y="0" width="${MAP_W}" height="${fogTo.toFixed(0)}" fill="url(#mfog)"/>${clouds}<text x="${MAP_W / 2}" y="112" text-anchor="middle" direction="rtl" font-size="17" font-weight="800" fill="#5F6B84">✨ עוד הרבה תחנות בדרך…</text>`;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${MAP_W} ${H}`);
+  svg.setAttribute('class', 'map-svg');
+  svg.setAttribute('role', 'group');
+  svg.setAttribute('aria-label', 'מפת התחנות');
+  svg.innerHTML = out.join('') + under.join('') + stuff.map(o => o.svg).join('') + st.slice(1).join('') + st[0] + fog;
+  const world = h('div', { class: 'map-world' }); world.append(svg);
+  const cur = stationAt(at);
+  const go = h('button', { class: 'btn green map-play', onclick: () => startStation(at) }, h('span', { class: 'ic' }, KIND[cur.kind].icon), h('span', null, h('b', null, `לתחנה ${at + 1}`), h('small', null, stationTitle(cur))));
+  app.append(world, h('div', { class: 'map-bar' }, go));
+  const tap = g => {
+    const i = +g.dataset.i;
+    if (g.classList.contains('ms-locked')) { if (G) G.fromTo($('.mbody', g), { x: -6 }, { x: 0, duration: .45, ease: 'elastic.out(1,0.3)' }); toast('🔒 התחנה הזו עוד נעולה. עוברים את התחנה הכתומה כדי להגיע אליה.', 2600); return; }
+    startStation(i);
+  };
+  svg.addEventListener('click', e => { const g = e.target.closest('.ms'); if (g) tap(g); });
+  svg.addEventListener('keydown', e => { const g = e.target.closest('.ms'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); tap(g); } });
+
+  const nowEl = $('.ms-now', svg);
+  requestAnimationFrame(() => { if (!nowEl) return; const r = nowEl.getBoundingClientRect(); window.scrollTo(0, Math.max(0, r.top + scrollY - innerHeight * .5)); });
+  // motion: the current station breathes, the child's avatar bobs, fireflies blink, water flows, the windmill turns
+  if (G && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const ctx = G.context(() => {
+      G.fromTo('.map-svg .mring', { scale: 1, opacity: .9 }, { scale: 1.55, opacity: 0, duration: 1.4, repeat: -1, ease: 'power1.out', transformOrigin: '50% 50%' });
+      G.to('.map-svg .mme', { y: -6, duration: .9, repeat: -1, yoyo: true, ease: 'sine.inOut' });
+      [...document.querySelectorAll('.map-svg .mfly')].forEach(f => G.to(f, { opacity: .15, x: (Math.random() - .5) * 18, y: (Math.random() - .5) * 14, duration: 1 + Math.random() * 1.6, repeat: -1, yoyo: true, ease: 'sine.inOut', delay: Math.random() }));
+      G.to('.map-svg .mflow', { strokeDashoffset: -84, duration: 2.4, repeat: -1, ease: 'none' });
+      G.to('.map-svg .mfall', { strokeDashoffset: -44, duration: .7, repeat: -1, ease: 'none' });
+      G.to('.map-svg .mblade', { rotation: 360, duration: 9, repeat: -1, ease: 'none', transformOrigin: '50% 50%' });
+      const near = [...document.querySelectorAll('.map-svg .ms')].filter(g => Math.abs(+g.dataset.i - at) <= 4).map(g => $('.mbody', g));
+      G.from(near, { scale: .4, opacity: 0, duration: .5, stagger: .06, ease: 'back.out(2.5)', transformOrigin: '50% 50%', delay: .15 });
+      G.from('.map-bar', { y: 90, duration: .5, ease: 'back.out(1.6)', delay: .3 });
+    });
+    cleanup = () => ctx.revert();
+  }
 }
 
 /* =========================================================
