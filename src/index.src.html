@@ -28,9 +28,22 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 .top .title{flex:1;font-weight:800;font-size:18px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{border:0;background:var(--card);border-radius:12px;padding:8px 12px;font-weight:700;box-shadow:0 2px 0 var(--line);min-height:40px}
 .icon-btn[hidden]{display:inline-block;visibility:hidden}
-.stars{font-weight:800;background:var(--card);padding:8px 10px;border-radius:12px;box-shadow:0 2px 0 var(--line);min-width:70px;text-align:center}
-.timer{font-weight:800;background:var(--card);padding:8px 8px;border-radius:12px;box-shadow:0 2px 0 var(--line);white-space:nowrap;font-variant-numeric:tabular-nums;direction:ltr}
+.icon-btn.back{font-size:22px;min-width:44px;padding:6px 10px;line-height:1}
+/* with the learning clock and the parent timer the header is full: smaller chips keep room for the title */
+header.top{gap:6px;padding-left:12px;padding-right:12px}
+.top .title{font-size:17px}
+.stars{font-weight:800;background:var(--card);padding:8px 8px;border-radius:12px;box-shadow:0 2px 0 var(--line);min-width:56px;text-align:center}
+.timer{font-weight:800;font-size:15px;background:var(--card);padding:8px 6px;border-radius:12px;box-shadow:0 2px 0 var(--line);white-space:nowrap;font-variant-numeric:tabular-nums;direction:ltr}
 .timer[hidden]{display:none}
+.clock{font-weight:800;background:var(--green-soft,#E3F6E9);color:var(--green-dark);padding:8px 6px;border-radius:12px;box-shadow:0 2px 0 var(--line);white-space:nowrap;font-variant-numeric:tabular-nums;direction:ltr;font-size:15px}
+.clock[hidden]{display:none}
+.clock.paused{opacity:.55}
+@media (max-width:375px){.top .title{font-size:15px}.clock,.timer{font-size:14px;padding:7px 4px}.stars{min-width:50px;padding:7px 6px}header.top{gap:5px;padding-left:10px;padding-right:10px}}
+/* my settings */
+.ks-big{font-size:46px;font-weight:800;font-variant-numeric:tabular-nums;direction:ltr;text-align:center;line-height:1.1;margin:6px 0}
+.ks-note{font-size:14px;color:var(--muted);text-align:center;margin:4px 0 0}
+.ks-card{margin:12px 0}
+.ks-card.parent .ks-big{color:var(--blue-dark)}
 #app.think .choice,#app.think .opt,#app.think .tile,#app.think .chip:not(.placed){pointer-events:none;opacity:.45;filter:grayscale(.5);transition:opacity .3s}
 .think-badge{position:fixed;top:calc(70px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:30;background:var(--ink);color:#fff;padding:8px 18px;border-radius:999px;font-weight:800;font-size:17px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
 .think-badge[hidden]{display:none}
@@ -42,6 +55,8 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 .kid-home .map-go.big{padding:22px 18px;margin:4px 0 14px}.kid-home .map-go.big .ic{font-size:46px}.kid-home .map-go.big b{font-size:25px}
 .home-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 6px}
 .home-tile{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;border-radius:var(--radius);background:var(--card);box-shadow:0 4px 0 var(--line);padding:16px 8px;min-height:44px;font:inherit}
+.home-tile.wide{grid-column:1/-1;flex-direction:row;justify-content:center;gap:12px;padding:12px 8px}
+.home-tile.wide .ic{font-size:30px}
 .home-tile .ic{font-size:40px;line-height:1.1}.home-tile b{font-size:18px}.home-tile small{font-size:13px;color:var(--muted)}
 .link-btn{border:0;background:none;color:var(--blue);font:inherit;font-weight:800;font-size:15px;padding:10px 12px;min-height:44px}
 /* parent code */
@@ -369,8 +384,9 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 </head>
 <body>
 <header class="top">
-  <button id="backBtn" class="icon-btn" hidden>→ תפריט</button>
+  <button id="backBtn" class="icon-btn back" aria-label="חזרה" hidden>→</button>
   <div class="title" id="screenTitle">אותיות באנגלית</div>
+  <div class="clock" id="clock" hidden></div>
   <div class="timer" id="timer" hidden></div>
   <div class="stars" id="stars">⭐ <span id="starCount">0</span></div>
 </header>
@@ -759,7 +775,7 @@ function loadProfile(id) {
     stickers: store.get('stickers', []), goal: store.get('goal', 10), timerMin: store.get('timerMin', 0), guess: store.get('guess', {}), spoken: store.get('spoken', {}),
     startedAt: null, breakShown: false,
   });
-  PlayTimer.render();
+  PlayTimer.render(); Clock.render();
 }
 const fmt = s => state.caseMode === 'upper' ? s.toUpperCase() : s.toLowerCase();
 const curLevel = () => LEVELS[state.level - 1];
@@ -869,6 +885,26 @@ const Activity = {
     while (keys.length > 90) delete state.time[keys.shift()];
     store.set('time', state.time);
     checkGoal();
+  },
+};
+/* The child's learning clock: seconds of learning in this sitting, for each child.
+   It runs only while the game is on screen and someone touched it in the last minute (like the daily time). */
+const Clock = {
+  secs: {},
+  active() { return !document.hidden && Date.now() - Activity.last <= 60000; },
+  sec() { return this.secs[PID] || 0; },
+  init() { setInterval(() => this.tick(), 1000); this.render(); },
+  tick() {
+    if (PID && this.active()) this.secs[PID] = this.sec() + 1;
+    this.render();
+  },
+  render() {
+    const el = $('#clock'); if (!el) return;
+    el.hidden = !PID;
+    if (!PID) return;
+    el.textContent = '⏱️ ' + fmtClock(this.sec());
+    el.title = 'כמה זמן לומדים עכשיו';
+    el.classList.toggle('paused', !this.active());
   },
 };
 function checkGoal() {
@@ -1272,7 +1308,7 @@ const PlayTimer = {
     if (!PID || !state.timerMin) { el.hidden = true; return; }
     const left = this.left();
     el.hidden = false;
-    el.textContent = (left <= 0 ? '⏰ ' : '⏱️ ') + fmtClock(left);
+    el.textContent = (left <= 0 ? '⏰ ' : '⏳ ') + fmtClock(left);
     el.classList.toggle('low', left > 0 && left <= 60);
     el.classList.toggle('over', left <= 0);
   },
@@ -1473,7 +1509,9 @@ function Home() {
     h('button', { class: 'home-tile', onclick: () => Practice() }, h('span', { class: 'ic' }, '🔁'), h('b', null, 'חזרה ושינון'),
       h('small', null, open ? `${open} נושאים פתוחים` : 'נפתח אחרי התחנה הראשונה')),
     h('button', { class: 'home-tile', onclick: () => LeaderBoard() }, h('span', { class: 'ic' }, '🏆'), h('b', null, 'טבלת האלופים'),
-      h('small', null, `⭐ ${mapStars(mm)} במפה`)));
+      h('small', null, `⭐ ${mapStars(mm)} במפה`)),
+    h('button', { class: 'home-tile wide', onclick: () => KidSettings() }, h('span', { class: 'ic' }, '⚙️'),
+      h('span', null, h('b', null, 'ההגדרות שלי'), h('small', { style: 'display:block' }, 'שעון, נקודות וקול'))));
 
   app.append(h('div', { class: 'kid-home' }, meBar, mapBtn, ...(resumeBtn ? [resumeBtn] : []), tiles,
     h('div', { class: 'row' },
@@ -1532,6 +1570,46 @@ function Practice() {
   app.append(...[hello, resumeButton(), levels, toggle, letters, review, list,
     locked ? h('p', { class: 'sub', style: 'margin-top:14px' }, (locked === 1 ? `🔒 עוד נושא אחד ייפתח כאן כשתגיע${g('', 'י')} אליו במפה.` : `🔒 עוד ${locked} נושאים ייפתחו כאן כשתגיע${g('', 'י')} אליהם במפה.`)) : null].filter(Boolean));
   enter(list);
+}
+/* My settings (for the child): my learning clock, the parent's timer (only to look at), my points, the voice, big or small letters */
+function KidSettings() {
+  if (!PID) return ProfilePicker();
+  endRun();
+  Lock.open = false;
+  const app = screen('ההגדרות שלי'); menu = 'home';
+  const p = me(), mm = mapState();
+  const now = h('div', { class: 'ks-big' }), today = h('p', { class: 'ks-note' }), pause = h('p', { class: 'ks-note' });
+  const left = h('div', { class: 'ks-big' });
+  const draw = () => {
+    now.textContent = fmtClock(Clock.sec());
+    const min = Math.floor(todaySec() / 60);
+    today.textContent = `היום בסך הכול: ${min} ${min === 1 ? 'דקה' : 'דקות'} · היעד: ${state.goal} דקות`;
+    pause.textContent = Clock.active() ? '' : `⏸️ השעון עוצר כשלא נוגעים במסך. ${g('גע', 'געי')} כדי להמשיך.`;
+    if (state.timerMin) left.textContent = fmtClock(Math.max(0, PlayTimer.left()));
+    PlayTimer.render(); Clock.render();
+  };
+  draw();
+  const iv = setInterval(draw, 1000);
+  cleanup = () => clearInterval(iv);
+  const clock = h('div', { class: 'card ks-card' }, h('b', null, '⏱️ השעון שלי'),
+    h('p', { class: 'ks-note' }, 'כמה זמן ' + g('אתה לומד', 'את לומדת') + ' עכשיו'), now, today, pause);
+  const parent = state.timerMin ? h('div', { class: 'card ks-card parent' }, h('b', null, '⏳ הזמן שההורים נתנו להיום'),
+    h('p', { class: 'ks-note' }, PlayTimer.isOver() ? 'הזמן של היום נגמר' : 'כמה זמן נשאר לשחק היום'), left,
+    h('p', { class: 'ks-note' }, `ההורים קבעו ${state.timerMin} דקות ביום. רק הם יכולים לשנות את זה.`)) : null;
+  const points = h('div', { class: 'card ks-card' }, h('b', null, '⭐ הנקודות שלי'),
+    h('div', { class: 'stats', style: 'margin-top:8px' },
+      h('div', { class: 'stat' }, h('b', null, state.stars), h('span', null, '⭐ כוכבים')),
+      h('div', { class: 'stat' }, h('b', null, mapStars(mm)), h('span', null, '🗺️ במפה')),
+      h('div', { class: 'stat' }, h('b', null, state.stickers.length), h('span', null, '🏷️ מדבקות'))),
+    h('p', { class: 'ks-note' }, `🗺️ ${g('אתה', 'את')} בתחנה ${mm.at + 1}: ${stationTitle(stationAt(mm.at))}`),
+    h('div', { class: 'row' }, h('button', { class: 'btn secondary small', onclick: () => MyArea() }, '📒 האזור שלי')));
+  const toggle = h('div', { class: 'case-toggle', role: 'group', 'aria-label': 'סוג אותיות' },
+    h('button', { class: state.caseMode === 'upper' ? 'on' : '', onclick: () => { state.caseMode = 'upper'; store.set('case', 'upper'); KidSettings(); } }, 'אותיות גדולות ', en('ABC')),
+    h('button', { class: state.caseMode === 'lower' ? 'on' : '', onclick: () => { state.caseMode = 'lower'; store.set('case', 'lower'); KidSettings(); } }, 'אותיות קטנות ', en('abc')));
+  app.append(...[h('div', { class: 'me-head' }, h('div', { class: 'av' }, p.avatar), h('h1', null, p.name)),
+    clock, parent, points, voiceSettings(),
+    h('div', { class: 'card ks-card' }, h('b', null, '🔤 איך לראות את האותיות'), h('div', { style: 'margin-top:8px' }, toggle))].filter(Boolean));
+  enter(clock);
 }
 function setCase(m) { state.caseMode = m; store.set('case', m); Practice(); }
 function setLevel(n) { if (!levelOpen(n)) return; state.level = n; store.set('level', n); Practice(); }
@@ -1740,7 +1818,8 @@ function ParentArea() {
     h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:10px' }, h('button', { class: 'btn small', onclick: () => ProfileForm() }, '➕ ילד חדש')),
     ...mine,
     h('div', { class: 'sec-title' }, '⚙️ הטלפון והחשבון'),
-    pinBox, accountBox(), voiceSettings(), speakSettings(), installHelp(), updateBox(),
+    pinBox, accountBox(), speakSettings(), installHelp(), updateBox(),
+    h('p', null, 'את הקול שמקריא את המילים הילד בוחר לבד, ב"ההגדרות שלי".'),
     h('p', null, 'הילד מתקדם במפה: כל נושא מתחיל בשיעור, אחריו תרגול ובסוף בוחן. בכפתור "חזרה ושינון" נפתח כל שלב אחרי שהילד הגיע אליו במפה.'),
     h('p', null, 'לכל ילד יש התקדמות משלו. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
     h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
@@ -4428,6 +4507,7 @@ Profiles.migrate();
 { const act = RAW.get('active', null); if (act && Profiles.get(act)) loadProfile(act); }
 Activity.init();
 PlayTimer.init();
+Clock.init();
 renderStars();
 Start();
 afterUpdate();
