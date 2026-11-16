@@ -764,7 +764,8 @@ const Resume = {
 
 /* =========================================================
    Mastery: what the child knows and what was hard (Leitner boxes)
-   keys: L:A = letter, W:cat = word, M:b = mirror letter
+   keys: L:A = letter, W:cat = word, M:b = mirror letter, P: = phrase, S: = sentence, K: = joining word,
+   D:sh = two letters one sound, C:scene:turn = a turn in a conversation
    box goes up on a first-try answer, back to 0 on a mistake.
    weak = had a mistake and not yet 2 first-try answers in a row since.
    ========================================================= */
@@ -783,6 +784,14 @@ const Mastery = {
     return WORDS.filter(w => w.L <= state.level && this.isWeak('W:' + w.w))
       .filter((w, i, a) => a.findIndex(x => x.w === w.w) === i);
   },
+  weakOf(prefix) { return Object.keys(state.mastery).filter(k => k.startsWith(prefix) && this.isWeak(k)); },
+  knownOf(prefix) { return Object.keys(state.mastery).filter(k => k.startsWith(prefix) && this.isKnown(k)); },
+  weakPhrases() { return this.weakOf('P:').map(k => findPhrase(k.slice(2))).filter(Boolean); },
+  // only the version for this child (boy or girl): the other one cannot be practised, so it is not counted
+  weakSentences() { return this.weakOf('S:').map(k => [k.slice(2), sentByText(k.slice(2))]).filter(([t, x]) => x && sText(x) === t).map(([, x]) => x); },
+  weakChats() { return DIALOGS.filter(d => d.turns.some((t, i) => this.isWeak(`C:${d.id}:${i}`))); },
+  weakLinks() { return this.weakOf('K:').map(k => k.slice(2)).filter(k => LINKS[k] || BE.includes(k) || k === 'aan'); },
+  weakCount() { return this.weakLetters().length + this.weakWords().length + this.weakPhrases().length + this.weakSentences().length + this.weakChats().length + this.weakLinks().length; },
 };
 
 /* =========================================================
@@ -1300,7 +1309,7 @@ function EndScreen(stageKey, earned, again, nextIdx) {
     h('h2', null, g('סיימת את הסבב!', 'סיימת את הסבב!')),
     h('p', { class: 'sub' }, `${earned} תשובות נכונות. סך הכול ${state.stars} כוכבים ⭐`),
     h('p', { class: 'hint blue' }, '🗺️ כוכבים מלאים ובונוסים מקבלים במפה.'),
-    stageKey === 'review' && !Mastery.weakLetters().length && !Mastery.weakWords().length
+    stageKey === 'review' && !Mastery.weakCount()
       ? h('p', { class: 'hint green' }, '💪 תרגלת את כל מה שהיה קשה. אין יותר מה לחזור עליו כרגע!') : null,
     h('div', { class: 'row' },
       h('button', { class: 'btn orange', onclick: () => again() }, '🔁 עוד סבב'),
@@ -1369,10 +1378,10 @@ function Home() {
 
   const letters = h('div', { class: 'level-letters en' }, lv.letters.split('').join(' '));
 
-  const weakN = Mastery.weakLetters().length + Mastery.weakWords().length;
+  const weakN = Mastery.weakCount();
   const review = weakN ? h('button', { class: 'stage review-card', onclick: () => { if (canPlay()) StageReview(); } },
     h('span', { class: 'num' }, '🔁'),
-    h('span', { class: 'txt' }, h('b', null, 'חזרה על מה שהיה קשה'), h('span', null, `${weakN} אותיות ומילים שכדאי לתרגל שוב`)),
+    h('span', { class: 'txt' }, h('b', null, 'חזרה על מה שהיה קשה'), h('span', null, `${weakN} דברים שכדאי לתרגל שוב: אותיות, מילים, משפטים ושיחות`)),
     h('span', { class: 'got' }, '⭐ ' + stageStarsFor(state.level, 'review'))) : null;
 
   const list = h('div', { class: 'stage-list' }, STAGES.map((s, i) => {
@@ -1975,6 +1984,23 @@ function ParentReport() {
     h('p', { style: 'margin:6px 0 0;font-size:14px' }, 'סבב עם הרבה תשובות שגויות ברצף נחשב ניחוש: לא מקבלים עליו כוכב, וההתקדמות לא נספרת. אחרי כמה ניחושים ברצף המשחק עוצר, מסביר, ונותן כמה שניות לחשוב לפני כל תשובה.'));
   const known = LETTERS.filter(x => Mastery.isKnown('L:' + x.L)).map(x => x.L);
   const weakL = LETTERS.filter(x => Mastery.isWeak('L:' + x.L)).map(x => x.L);
+  // the way from letters to a conversation: what the child already knows at each step
+  const chatsKnown = DIALOGS.filter(d => d.turns.every((t, i) => Mastery.isKnown(`C:${d.id}:${i}`))).length;
+  const spokenWeek = days.reduce((a, d) => a + (state.spoken[dayKey(d)] || 0), 0);
+  const steps = [
+    ['🔤', 'אותיות', known.length, 26],
+    ['📖', 'מילים', new Set(Mastery.knownOf('W:')).size, null],
+    ['🔡', 'צירופי אותיות', Mastery.knownOf('D:').length, Object.keys(DIGRAPHS).length, 'sh, ch, th, ee, oo'],
+    ['💬', 'ביטויים של כל יום', Mastery.knownOf('P:').filter(k => findPhrase(k.slice(2))).length, PHRASES.length],
+    ['🔗', 'מילים מחברות', Mastery.knownOf('K:').length, Object.keys(LINKS).length + 4, 'I, you, am, is, are, a, an'],
+    ['🗣️', 'משפטים', Mastery.knownOf('S:').filter(k => sentByText(k.slice(2))).length, ALL_SENT().length],
+    ['💭', 'שיחות שלמות', chatsKnown, DIALOGS.length],
+  ];
+  const pathEl = h('div', { class: 'wlist' }, steps.map(([e, name, n, of, ex]) => h('div', { class: 'wrow' },
+    h('span', { class: 'e' }, e), h('span', { class: 't' }, h('b', null, name), ex ? h('span', { class: 'en', style: 'text-align:right' }, ex) : null),
+    h('span', { class: 'n', style: 'color:var(--green-dark)' }, of ? `${Math.min(n, of)}/${of}` : String(n)))),
+    h('div', { class: 'wrow' }, h('span', { class: 'e' }, '🎤'), h('span', { class: 't' }, h('b', null, 'תרגול דיבור השבוע')), h('span', { class: 'n' }, `${spokenWeek} פעמים`)));
+  const hardTalk = [...Mastery.weakSentences().map(sText), ...Mastery.weakPhrases().map(x => x.p)].slice(0, 8);
   const summary = () => [
     `סיכום התקדמות: ${p.name} ${p.avatar}`,
     `זמן משחק השבוע: ${weekMin} דקות. רצף: ${streak()} ימים. מדבקות: ${state.stickers.length}.`,
@@ -1982,6 +2008,8 @@ function ParentReport() {
     `אותיות שעוד מתאמנים: ${weakL.join(' ') || 'אין'}`,
     `מילים שהיו קשות: ${hard.filter(([k]) => Mastery.isWeak(k)).map(([k]) => k.slice(2)).join(', ') || 'אין'}`,
     `סבבים עם הרבה ניחושים השבוע: ${weekGuess}`,
+    `בדרך לשיחה: ${steps.map(([, name, n, of]) => `${name} ${of ? Math.min(n, of) + '/' + of : n}`).join(' · ')}`,
+    `תרגול דיבור השבוע: ${spokenWeek} פעמים`,
   ].join('\n');
   const share = async () => {
     const text = summary();
@@ -1995,6 +2023,11 @@ function ParentReport() {
       h('div', { class: 'stat' }, h('b', null, weekMin), h('span', null, 'דקות השבוע')),
       h('div', { class: 'stat' }, h('b', null, streak()), h('span', null, '🔥 ימים ברצף')),
       h('div', { class: 'stat' }, h('b', null, `${known.length}/26`), h('span', null, 'אותיות ידועות'))),
+    h('div', { class: 'sec-title' }, '🎯 בדרך לשיחה באנגלית'),
+    h('p', { class: 'sub', style: 'margin-top:0' }, ...bi('המשחק מוביל צעד אחרי צעד: אותיות, מילים, משפטים ושיחה. היעד הוא רמה Pre A1 של Cambridge (המבחן לילדים Starters): להבין שאלות פשוטות על עצמך, כמו שם, גיל ומה אוהבים, לענות במשפט קצר, ולקרוא ולכתוב מילים ומשפטים קצרים.')),
+    pathEl,
+    ...(hardTalk.length ? [h('div', { class: 'sec-title' }, 'משפטים וביטויים שעוד מתאמנים עליהם'),
+      h('div', { class: 'wlist' }, hardTalk.map(t => h('div', { class: 'wrow' }, h('span', { class: 't' }, h('b', { class: 'en' }, t)))))] : []),
     h('div', { class: 'sec-title' }, 'זמן משחק (דקות) ב־7 הימים האחרונים'),
     h('div', { class: 'card' }, bars, h('div', { class: 'legend' },
       h('span', null, h('i', { style: 'background:var(--green)' }), `הגיע/ה ליעד (${state.goal} דק׳)`),
@@ -2731,9 +2764,21 @@ function WriteWords(res) {
 function StageReview() {
   const L = shuffle(Mastery.weakLetters()).slice(0, 4);
   const W = shuffle(Mastery.weakWords()).slice(0, 6).map(w => w.w);
-  if (!L.length && !W.length) { toast('אין כרגע מה לחזור עליו 👍'); return Home(); }
   if (L.length) return StageListen({ review: true, order: L.map(x => [x, Math.floor(Math.random() * findLetter(x).kws.length)]), round: 0, earned: 0, words: W });
-  StageBuild({ review: true, list: W, round: 0, earned: 0 });
+  if (W.length) return StageBuild({ review: true, list: W, round: 0, earned: 0 });
+  const S = shuffle(Mastery.weakSentences()).slice(0, 6);
+  if (S.length) return StageSentence({ list: S.map(sText), kinds: S.map((x, i) => ['build', 'gap', 'meaning'][i % 3]), round: 0, earned: 0 });
+  const P = shuffle(Mastery.weakPhrases()).slice(0, 6);
+  if (P.length) return StageTalk({ list: P.map(x => x.p), kinds: P.map((x, i) => i % 2 ? 'say' : 'hear'), round: 0, earned: 0 });
+  const K = Mastery.weakLinks();
+  if (K.length) {
+    const list = shuffle(K).slice(0, 6).map(k => BE.includes(k) ? { t: 'be', i: BE_ITEMS.indexOf(pick(BE_ITEMS.filter(x => x.b === k))) }
+      : k === 'aan' ? { t: 'aan', i: Math.floor(Math.random() * AAN_ITEMS.length) } : { t: 'mean', w: k });
+    return StageLink({ list, round: 0, earned: 0 });
+  }
+  const C = Mastery.weakChats();
+  if (C.length) return StageChat({ id: pick(C).id, round: 0, earned: 0 });
+  toast('אין כרגע מה לחזור עליו 👍'); return Home();
 }
 
 /* =========================================================
@@ -3081,7 +3126,7 @@ const BE_TIP = { am: 'אחרי I תמיד באה המילה am.', is: 'אחרי 
 const AAN_ITEMS = [['apple', '🍎'], ['egg', '🥚'], ['ant', '🐜'], ['owl', '🦉'], ['orange', '🍊'], ['umbrella', '☂️'], ['cat', '🐱'], ['dog', '🐶'], ['ball', '⚽'], ['bus', '🚌'], ['fish', '🐟'], ['hat', '👒']];
 const anOf = w => /^[aeiou]/.test(w) ? 'an' : 'a';
 // Hebrew text with English words inside: each English run gets its own left-to-right island, so the order stays right
-const bi = t => String(t).split(/([A-Za-z]+(?:['’ ][A-Za-z]+)*)/).filter(Boolean).map((p, i) => /^[A-Za-z]/.test(p) ? en(p) : p);
+const bi = t => String(t).split(/([A-Za-z][A-Za-z0-9]*(?:['’ ][A-Za-z0-9]+)*)/).filter(Boolean).map((p, i) => /^[A-Za-z]/.test(p) ? en(p) : p);
 const LINK_SETS = { 1: ['I', 'am', 'it', 'is', 'a', 'an'], 2: ['my', 'this', 'have', 'like', 'the'], 3: ['you', 'are', 'he', 'she', 'we', 'can', 'want', 'where'] };
 
 function StageLink(res) {
@@ -3263,12 +3308,13 @@ function gapOf(x, fk, pool) {
 // "I happy" is what Hebrew speakers say: show how English needs the joining word
 const beHint = t => { const w = sWords(t), i = w.findIndex(x => BE.includes(x)); return i > 0 ? `באנגלית לא אומרים ${[...w.slice(0, i), ...w.slice(i + 1)].join(' ')} אלא ${w.join(' ')}. ${BE_TIP[w[i]]}` : null; };
 const ALL_SENT = () => Object.entries(FRAMES).flatMap(([fk, F]) => F.items.map(x => ({ ...x, fk })));
+const sentByText = t => ALL_SENT().find(x => (Array.isArray(x.en) ? x.en : [x.en]).includes(t));
 
 function StageSentence(res) {
   const keys = (Run && Run.frames) || Object.keys(FRAMES).filter(k => FRAMES[k].L <= state.level);
   const pool = ALL_SENT().filter(x => keys.includes(x.fk));
   let list, kinds, round = 0, earned = 0;
-  if (res && res.list) { list = res.list.map(t => ALL_SENT().find(x => sText(x) === t)).filter(Boolean); kinds = res.kinds; round = res.round || 0; earned = res.earned || 0; }
+  if (res && res.list) { list = res.list.map(sentByText).filter(Boolean); kinds = res.kinds; round = res.round || 0; earned = res.earned || 0; }
   else {
     const weak = shuffle(pool.filter(x => Mastery.isWeak('S:' + sText(x)))).slice(0, 2);
     list = [...weak, ...shuffle(pool.filter(x => !weak.includes(x)))].slice(0, (Run && Run.rounds) || 6);
