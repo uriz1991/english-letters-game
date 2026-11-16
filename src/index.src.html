@@ -306,6 +306,14 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .row-opts{flex-direction:row;flex-wrap:wrap;justify-content:center}
 .row-opts .opt{flex:0 1 auto;min-width:96px;font-size:24px}
 .link-word .big-word{font-size:64px;font-weight:800;line-height:1.1}
+.chat-head{display:flex;align-items:center;gap:10px;justify-content:center;font-size:19px;margin:2px 0 8px}.chat-head .e{font-size:34px}
+.chat-log{display:flex;flex-direction:column;gap:10px;margin:10px 0}
+.bub{display:flex;align-items:flex-end;gap:8px;max-width:92%}
+.bub .av{font-size:30px;line-height:1}
+.bub .tx{background:var(--card);border-radius:18px;padding:10px 14px;box-shadow:0 3px 0 var(--line);font-size:20px;line-height:1.35}
+.bub .tx small{display:block;font-size:14px;color:var(--muted);margin-top:4px;font-weight:600}
+.bub.npc{align-self:flex-end;flex-direction:row-reverse}.bub.npc .tx{border-bottom-left-radius:6px}
+.bub.mine{align-self:flex-start;flex-direction:row-reverse}.bub.mine .tx{background:var(--green-soft);border-bottom-right-radius:6px}
 .speak{margin-top:10px;padding-top:10px;border-top:2px dashed rgba(0,0,0,.08)}
 .speak-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .speak-btn{background:var(--orange,#f08a24);box-shadow:0 4px 0 #b9651a}
@@ -1308,11 +1316,11 @@ function EndScreen(stageKey, earned, again, nextIdx) {
    Home
    ========================================================= */
 const STAGES = [];
-const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה', talk: 'מדברים', link: 'מילים מחברות', sentence: 'בונים משפט' };
+const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה', talk: 'מדברים', link: 'מילים מחברות', sentence: 'בונים משפט', chat: 'שיחות' };
 const RESUME_RUN = {
   listen: d => StageListen(d), pairs: d => StagePairs(d), mirror: d => MirrorChallenge(d.earned, d),
   build: d => StageBuild(d), missing: d => StageMissing(d), 'write-letters': d => WriteLetters(d), 'write-words': d => WriteWords(d),
-  read: d => StageRead(d), talk: d => StageTalk(d), link: d => StageLink(d), sentence: d => StageSentence(d),
+  read: d => StageRead(d), talk: d => StageTalk(d), link: d => StageLink(d), sentence: d => StageSentence(d), chat: d => StageChat(d),
 };
 function goalBar() {
   const min = Math.floor(todaySec() / 60), goal = state.goal;
@@ -3349,6 +3357,132 @@ function StageSentence(res) {
 }
 
 /* =========================================================
+   Stage 10: שיחות (a short conversation with turns)
+   A character says a line, the child picks the right answer (and can say it out loud), and the talk goes on.
+   he / me can be [boy, girl]: in "he" for the character's line it is the child being spoken to,
+   in "me" it is the child speaking. {name} = the child's name if it is written in English, else Dan/Dana.
+   bad = answers that are real English but wrong here (so the child has to understand the question).
+   ========================================================= */
+const DIALOGS = [
+  { id: 'friend', L: 1, title: 'ילד חדש בגן השעשועים', e: '🛝', who: '🧒', turns: [
+    { say: "Hi! I'm Sam.", he: 'היי! אני סאם.', ok: "Hi, Sam! I'm {name}.", me: 'היי סאם! אני {name}.', bad: ['Thank you!', 'Good night!'] },
+    { say: 'How are you?', he: 'מה שלומך?', ok: "I'm fine, thank you!", me: 'אני בסדר, תודה!', bad: ["I'm nine.", 'Yes, please!'] },
+    { say: 'How old are you?', he: ['בן כמה אתה?', 'בת כמה את?'], ok: "I'm nine.", me: ['אני בן תשע.', 'אני בת תשע.'], bad: ["I'm fine.", 'It is a dog.'] },
+    { say: 'Do you want to play?', he: ['אתה רוצה לשחק?', 'את רוצה לשחק?'], ok: "Yes! Let's play!", me: 'כן! בוא נשחק!', bad: ['Good morning!', 'I am a cat.'] },
+  ] },
+  { id: 'snack', L: 1, title: 'בבית: ארוחת ארבע', e: '🍎', who: '👩', turns: [
+    { say: 'Are you hungry?', he: ['אתה רעב?', 'את רעבה?'], ok: 'Yes, I am hungry.', me: ['כן, אני רעב.', 'כן, אני רעבה.'], bad: ['No, I am nine.', 'Goodbye!'] },
+    { say: 'Do you want an apple?', he: ['אתה רוצה תפוח?', 'את רוצה תפוח?'], ok: 'Yes, please!', me: 'כן, בבקשה!', bad: ['It is a cat.', 'Sorry!'] },
+    { say: 'Here you are.', he: 'הנה, בבקשה.', ok: 'Thank you!', me: 'תודה!', bad: ['Good night!', 'Where is the cat?'] },
+    { say: 'What do you want to drink?', he: ['מה אתה רוצה לשתות?', 'מה את רוצה לשתות?'], ok: 'I want water, please.', me: 'אני רוצה מים, בבקשה.', bad: ['I am water.', 'I have two hands.'] },
+  ] },
+  { id: 'shop', L: 2, title: 'בחנות הגלידה', e: '🍦', who: '🧑‍🍳', turns: [
+    { say: 'Hello! Can I help you?', he: 'שלום! אפשר לעזור לך?', ok: 'Can I have ice cream, please?', me: 'אפשר לקבל גלידה, בבקשה?', bad: ['I am ice cream.', 'Where is mom?'] },
+    { say: 'Chocolate or vanilla?', he: 'שוקולד או וניל?', ok: 'Chocolate, please.', me: 'שוקולד, בבקשה.', bad: ['Yes, I can swim.', 'Good night!'] },
+    { say: 'Here you are!', he: 'הנה, בבקשה!', ok: 'Thank you!', me: 'תודה!', bad: ["Sorry, I'm late.", 'I like cats.'] },
+    { say: 'Have a nice day!', he: 'שיהיה לך יום נעים!', ok: 'You too! Goodbye!', me: 'גם לך! להתראות!', bad: ["I'm hungry.", 'It is big.'] },
+  ] },
+  { id: 'school', L: 2, title: 'בכיתה', e: '🏫', who: '👩‍🏫', turns: [
+    { say: 'Good morning, class!', he: 'בוקר טוב, כיתה!', ok: 'Good morning, teacher!', me: 'בוקר טוב, המורה!', bad: ['Good night!', 'Happy birthday!'] },
+    { say: 'Where is your book?', he: 'איפה הספר שלך?', ok: 'It is in my bag.', me: 'הוא בתיק שלי.', bad: ['I am a book.', 'I like pizza.'] },
+    { say: 'Can you read this word?', he: ['אתה יכול לקרוא את המילה הזאת?', 'את יכולה לקרוא את המילה הזאת?'], ok: 'Yes, I can.', me: ['כן, אני יכול.', 'כן, אני יכולה.'], bad: ['Yes, I am.', 'No, it is hot.'] },
+    { say: 'Good job!', he: 'כל הכבוד!', ok: 'Thank you!', me: 'תודה!', bad: ["I'm sorry.", 'Where is the bathroom?'] },
+  ] },
+  { id: 'lost', L: 3, title: 'בפארק: הכדור נעלם', e: '⚽', who: '👧', turns: [
+    { say: "What's wrong?", he: 'מה קרה?', ok: "I can't find my ball.", me: ['אני לא מוצא את הכדור שלי.', 'אני לא מוצאת את הכדור שלי.'], bad: ['I am nine.', 'It is hot.'] },
+    { say: 'What color is it?', he: 'באיזה צבע הוא?', ok: 'It is red.', me: 'הוא אדום.', bad: ['I am red.', 'It is a cat.'] },
+    { say: 'Is this your ball?', he: 'זה הכדור שלך?', ok: 'Yes! Thank you!', me: 'כן! תודה!', bad: ["No, I'm fine.", 'Good morning!'] },
+    { say: "Let's play together!", he: ['בוא נשחק ביחד!', 'בואי נשחק ביחד!'], ok: "OK! Let's play!", me: 'בסדר! בואי נשחק!', bad: ['I have a dog.', 'Happy birthday!'] },
+  ] },
+  { id: 'party', L: 3, title: 'מסיבת יום הולדת', e: '🎂', who: '🧒', turns: [
+    { say: 'Welcome to my party!', he: 'ברוכים הבאים למסיבה שלי!', ok: 'Happy birthday, Leo!', me: 'יום הולדת שמח, ליאו!', bad: ['Good night, Leo!', 'I need help.'] },
+    { say: 'Do you like cake?', he: ['אתה אוהב עוגה?', 'את אוהבת עוגה?'], ok: 'Yes, I like cake!', me: ['כן, אני אוהב עוגה!', 'כן, אני אוהבת עוגה!'], bad: ['Yes, I am cake.', 'No, I can swim.'] },
+    { say: 'How old are you?', he: ['בן כמה אתה?', 'בת כמה את?'], ok: "I'm nine. And you?", me: ['אני בן תשע. ואתה?', 'אני בת תשע. ואתה?'], bad: ["I'm fine, and you?", 'It is big.'] },
+    { say: "I'm ten today!", he: 'אני בן עשר היום!', ok: 'Wow! Have a great day!', me: 'וואו! שיהיה לך יום מעולה!', bad: ["Sorry, I'm late.", 'Where is my shoe?'] },
+  ] },
+  { id: 'help', L: 3, title: 'צריך עזרה', e: '🎒', who: '👨', turns: [
+    { say: 'Are you OK?', he: ['אתה בסדר?', 'את בסדר?'], ok: 'No, I need help.', me: ['לא, אני צריך עזרה.', 'לא, אני צריכה עזרה.'], bad: ['Yes, please!', 'Happy birthday!'] },
+    { say: "What's wrong?", he: 'מה קרה?', ok: 'My bag is too heavy.', me: 'התיק שלי כבד מדי.', bad: ['My bag is happy.', 'I am a bag.'] },
+    { say: 'I can help you.', he: 'אני יכול לעזור לך.', ok: 'Thank you, Dad!', me: 'תודה, אבא!', bad: ['Good night, Dad!', "I'm hungry."] },
+  ] },
+];
+// the child's name inside an English line: only if it is written in English letters, so the English voice can say it
+const kidName = () => { const n = (me() && me().name || '').trim(); return /^[A-Za-z][A-Za-z '-]{0,15}$/.test(n) ? n : g('Dan', 'Dana'); };
+const kidNameHe = () => { const n = kidName(); return n === g('Dan', 'Dana') ? g('דן', 'דנה') : n; };
+const fillName = t => t.replace('{name}', kidName());
+const findDialog = id => DIALOGS.find(d => d.id === id);
+
+function StageChat(res) {
+  let dlg, round = 0, earned = 0;
+  if (res && res.id) { dlg = findDialog(res.id); round = res.round || 0; earned = res.earned || 0; }
+  if (!dlg) {
+    const ids = (Run && Run.scene) ? [Run.scene] : null;
+    const pool = ids ? DIALOGS.filter(d => ids.includes(d.id)) : DIALOGS.filter(d => d.L <= state.level);
+    // a conversation that was hard comes back first
+    const weak = pool.filter(d => d.turns.some((t, i) => Mastery.isWeak(`C:${d.id}:${i}`)));
+    dlg = pick(weak.length && Math.random() < .5 ? weak : pool);
+  }
+  const ROUNDS = dlg.turns.length;
+  const saveAt = r => Resume.save('chat', { id: dlg.id, round: r, earned });
+  const ear = (text, cls = 'mini-ear') => h('button', { class: cls, type: 'button', 'aria-label': 'השמע', onclick: e => { e.stopPropagation(); Speech.en(text, .8); } }, '🔊');
+  const app = screen('שיחות');
+  const log = h('div', { class: 'chat-log' });
+  const meAv = me() ? me().avatar : '🙂';
+  const npcBubble = (t, showHe) => h('div', { class: 'bub npc' }, h('span', { class: 'av' }, dlg.who),
+    h('div', { class: 'tx' }, h('span', { class: 'en' }, t.say), ear(t.say), showHe ? h('small', null, heOf(t.he)) : null));
+  const myBubble = t => h('div', { class: 'bub mine' }, h('div', { class: 'tx' }, h('span', { class: 'en' }, fillName(t.ok)), ear(fillName(t.ok)), h('small', null, heOf(t.me).replace('{name}', kidNameHe()))), h('span', { class: 'av' }, meAv));
+  // the turns already played (after coming back to it) stay on the screen
+  dlg.turns.slice(0, round).forEach(t => log.append(npcBubble(t, true), myBubble(t)));
+  const dots = h('div');
+  const area = h('div');
+  app.append(h('div', { class: 'chat-head' }, h('span', { class: 'e' }, dlg.e), h('b', null, dlg.title)), dots, log, area);
+
+  function turn() {
+    saveAt(round);
+    dots.replaceChildren(progressDots(ROUNDS, round));
+    const t = dlg.turns[round], ok = fillName(t.ok);
+    let solved = false, firstTry = true; Guard.start();
+    const say = () => Speech.en(t.say, .8);
+    const npc = npcBubble(t, false); log.append(npc); enter(npc);
+    const msg = h('p', { class: 'sub' }, 'מה ' + g('תענה', 'תעני') + '? ' + g('לחץ', 'לחצי') + ' על 🔊 כדי לשמוע כל תשובה.');
+    const heBtn = h('button', { class: 'btn small secondary', type: 'button', onclick: () => {
+      // the translation helps, but then the turn is not "first try" any more
+      if (!solved) firstTry = false;
+      $('.tx', npc).append(h('small', null, heOf(t.he))); heBtn.remove();
+    } }, '💡 מה אמרו?');
+    const opts = shuffle([ok, ...t.bad]);
+    const nextBtn = nextButton(round === ROUNDS - 1, () => { round++; if (round >= ROUNDS) EndScreen('chat', earned, () => StageChat()); else { area.replaceChildren(); turn(); } });
+    const optsEl = h('div', { class: 'opts' }, opts.map(o => h('div', { class: 'opt-row' },
+      h('button', { class: 'opt en', type: 'button', onclick: e => {
+        if (solved) return;
+        if (o === ok) {
+          solved = true; e.currentTarget.classList.add('right'); pop(e.currentTarget);
+          earned += Guard.star('chat');
+          Mastery.rec(`C:${dlg.id}:${round}`, firstTry);
+          if (!$('small', npc)) $('.tx', npc).append(h('small', null, heOf(t.he)));
+          const mine = myBubble(t); log.append(mine); enter(mine);
+          optsEl.remove(); heBtn.remove();
+          msg.textContent = 'נכון! 🎉';
+          nextBtn.before(h('div', { class: 'hint blue say-card' }, speakBox(ok) || h('p', null, ok),
+            t.ok.includes('{name}') ? h('p', { style: 'font-size:14px' }, ...bi('💡 כשמדברים באמת, אומרים את השם שלך במקום ' + kidName() + '.')) : null));
+          nextBtn.classList.remove('hidden');
+          Speech.en(ok, .8);
+          saveAt(round + 1 < ROUNDS ? round + 1 : round);
+          setTimeout(() => nextBtn.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
+        } else {
+          firstTry = false; Guard.miss(); e.currentTarget.classList.add('wrong'); shake(e.currentTarget);
+          msg.replaceChildren(...bi('זה לא מתאים לשאלה. ' + g('הקשב', 'הקשיבי') + ' שוב למה שאמרו ' + g('ונסה', 'ונסי') + ' עוד פעם 🙂'));
+          say();
+        }
+      } }, o), ear(o, 'ear'))));
+    area.append(msg, optsEl, h('div', { class: 'row' }, heBtn), nextBtn);
+    setTimeout(say, 400);
+    setTimeout(() => npc.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  }
+  turn();
+}
+
+/* =========================================================
    Stage registry
    ========================================================= */
 STAGES.push(
@@ -3361,6 +3495,7 @@ STAGES.push(
   { key: 'talk',    icon: '💬', name: 'מדברים',     desc: 'ביטויים של כל יום, ומתי אומרים אותם', run: () => StageTalk() },
   { key: 'link',    icon: '🔗', name: 'מילים מחברות', desc: 'I, you, am, is, are, a, an: המילים שכל משפט צריך', run: () => StageLink() },
   { key: 'sentence', icon: '🗣️', name: 'בונים משפט', desc: 'משפטים כמו I am, I like, I can, ואומרים אותם בקול', run: () => StageSentence() },
+  { key: 'chat',    icon: '💭', name: 'שיחות',      desc: 'שיחה קצרה עם תורות: שומעים, עונים ואומרים בקול', run: () => StageChat() },
 );
 
 /* =========================================================
@@ -3384,6 +3519,7 @@ const KIND = {
   talk: { icon: '💬', name: 'מדברים', run: () => StageTalk() },
   link: { icon: '🔗', name: 'מילים מחברות', run: () => StageLink() },
   frame: { icon: '🗣️', name: 'בונים משפט', run: () => StageSentence() },
+  chat: { icon: '💭', name: 'שיחה', run: () => StageChat() },
   chest: { icon: '🎁', name: 'תיבת הפתעה' },
 };
 const PHASES = { 1: 'אותיות, מילים וכתיבה', 2: 'מילים ומבחן כתיבה', 3: 'ביטויים של כל יום', 4: 'בונים משפטים', 5: 'שיחות', 6: 'תרגול בלי סוף' };
@@ -3445,16 +3581,21 @@ const MAP = (() => {
     add({ ...base, kind: 'frame', frames: bk.frames, quiz: true, pct: .85, rounds: 8, title: '🏁 בוחן משפטים' });
     add({ ...base, kind: 'chest' });
   });
+  // map v2: conversations, one station per scene, a chest after every two or three
+  [['friend', 'snack'], ['shop', 'school'], ['lost', 'party', 'help']].forEach((grp, gi) => {
+    grp.forEach(id => { const d = findDialog(id); add({ phase: 5, v: 2, letters: [], known: ALL_ABC, level: d.L, opts: 3, pct: .75, kind: 'chat', scene: id, rounds: d.turns.length, tag: 'שיחות', key: 'c-' + id, title: 'שיחה: ' + d.title }); });
+    add({ phase: 5, v: 2, letters: [], known: ALL_ABC, level: 3, kind: 'chest', tag: 'שיחות', key: 'c' + (gi + 1) });
+  });
   return out;
 })();
-const ENDLESS = ['listen', 'build', 'frame', 'read', 'missing', 'talk', 'wwrite', 'frame', 'listen', 'build', 'talk', 'frame'];
+const ENDLESS = ['listen', 'build', 'frame', 'read', 'chat', 'missing', 'talk', 'wwrite', 'frame', 'listen', 'chat', 'build', 'talk', 'frame'];
 function stationAt(i) {
   if (i < MAP.length) return MAP[i];
   const k = i - MAP.length, step = Math.floor(k / 10);
   const base = { i, id: 'e:' + k, phase: ENDLESS_PHASE, letters: [], known: ALL_ABC, level: 1 + (k % 3), opts: 6, pct: Math.min(.95, .85 + .01 * step), rounds: 8, dyn: true, tag: 'בלי סוף' };
   if (k % 10 === 9) return { ...base, kind: 'chest' };
   const kind = ENDLESS[(k - step) % ENDLESS.length];
-  return { ...base, kind, rounds: kind === 'wwrite' ? 3 : kind === 'read' || kind === 'talk' || kind === 'frame' ? 6 : 8 };
+  return { ...base, kind, rounds: kind === 'wwrite' ? 3 : kind === 'read' || kind === 'talk' || kind === 'frame' ? 6 : kind === 'chat' ? 4 : 8 };
 }
 const stationTitle = s => s.title || (s.quiz ? `🏁 בוחן: ${KIND[s.kind].name}` : KIND[s.kind].name);
 
