@@ -3644,11 +3644,13 @@ const ALL_ABC = MAP_GROUPS.join('').split('');
 const zoneOf = gi => gi < 2 ? { opts: 3, pct: .6 } : gi < 8 ? { opts: 4, pct: .75 } : { opts: 5, pct: .85 };
 const MAP = (() => {
   const out = [], seen = {};
-  // every station has a stable id, so new stations can be added anywhere without moving a child's stars.
+  // every station has a stable id = its key + kind, so new stations can be added anywhere without moving a child's stars.
+  // An id must never change once shipped: it does not include the phase number (that is only for display) or the order.
+  // Two stations of the same kind in one group get their own key (e.g. 'CD-rev').
   // v = the version of the map that added the station (1 = the first map), used once to move old progress.
   const add = s => {
-    const key = s.key || (s.phase === 1 ? s.letters0 || s.tag : s.tag);
-    let id = `${s.phase}:${key}:${s.quiz ? 'quiz' : s.kind}`;
+    let id = `${s.key}:${s.quiz ? 'quiz' : s.kind}`;
+    if (seen[id]) console.error('map: duplicate station id', id);
     seen[id] = (seen[id] || 0) + 1; if (seen[id] > 1) id += '#' + seen[id];
     out.push({ rounds: 8, v: 1, ...s, id, i: out.length });
   };
@@ -3664,7 +3666,7 @@ const MAP = (() => {
     if (words >= 5) add({ ...base, kind: 'build' });
     if (words >= 8) add({ ...base, kind: 'missing' });
     if (words >= 12 && gi % 2) add({ ...base, kind: 'read', rounds: 6 });
-    if (gi % 2) add({ ...base, kind: 'listen', letters: K.slice(-4), tag: 'חזרה', pct: Math.min(.9, z.pct + .05) });
+    if (gi % 2) add({ ...base, kind: 'listen', letters: K.slice(-4), tag: 'חזרה', key: grp + '-rev', pct: Math.min(.9, z.pct + .05) });
     if (gi === 3 || gi === 7 || gi === 12) {   // end of a block of letters
       if (LEVELS[level - 1].mirror) add({ ...base, kind: 'mirror', tag: LEVELS[level - 1].mirror.join(' ') });
       const lv = ALL_ABC.filter(L => findLetter(L).lvl === level);
@@ -3686,7 +3688,7 @@ const MAP = (() => {
     add({ ...base, kind: 'chest' }); }
   [1, 2, 3].forEach(l => {
     const base = { phase: 3, letters: [], known: ALL_ABC, level: l, opts: 5, pct: .8, tag: `ביטויים ${l}`, key: 't' + l };
-    add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk', pct: .9, quiz: true });
+    add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk', key: 't' + l + '-2' }); add({ ...base, kind: 'talk', pct: .9, quiz: true });
     add({ ...base, kind: 'chest' });
   });
   // map v2: building sentences. First the joining words a block needs, then one station per frame, a quiz and a chest.
