@@ -44,6 +44,30 @@ header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8
 .home-tile{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;border-radius:var(--radius);background:var(--card);box-shadow:0 4px 0 var(--line);padding:16px 8px;min-height:44px;font:inherit}
 .home-tile .ic{font-size:40px;line-height:1.1}.home-tile b{font-size:18px}.home-tile small{font-size:13px;color:var(--muted)}
 .link-btn{border:0;background:none;color:var(--blue);font:inherit;font-weight:800;font-size:15px;padding:10px 12px;min-height:44px}
+/* parent code */
+.pin-card .prompt{margin-bottom:4px}
+.pin-dots{display:flex;justify-content:center;gap:16px;margin:14px 0 6px}
+.pin-dots i{width:18px;height:18px;border-radius:50%;border:3px solid var(--blue);display:block}
+.pin-dots i.on{background:var(--blue)}
+.pin-keys{display:grid;grid-template-columns:repeat(3,76px);gap:10px;justify-content:center;margin:10px 0 2px}
+.pin-key{height:60px;border:0;border-radius:16px;background:var(--blue-soft);color:var(--ink);font:inherit;font-size:26px;font-weight:800;box-shadow:0 3px 0 #C9D6F5;touch-action:manipulation}
+.pin-key:active{transform:translateY(2px);box-shadow:0 1px 0 #C9D6F5}
+.pin-key:disabled{opacity:.45}
+.pin-msg{min-height:22px;margin:6px 0 0;color:var(--red);font-weight:700;font-size:15px}
+.pin-q{font-size:30px;font-weight:800;margin:10px 0}
+.pin-ans{text-align:center;font-size:24px;direction:ltr}
+.pin-wait{background:var(--red-soft);border-radius:14px;padding:12px;margin:12px 0;font-weight:700}
+/* parents area */
+.pa-kids{display:flex;flex-direction:column;gap:10px}
+.pa-kid.me{box-shadow:0 0 0 3px var(--blue),0 3px 0 var(--line)}
+.pa-top{display:flex;align-items:center;gap:10px}
+.pa-top .av{font-size:38px;line-height:1}
+.pa-top .nm{display:flex;flex-direction:column;flex:1;min-width:0}
+.pa-top .nm b{font-size:19px}.pa-top .nm small{color:var(--muted);font-size:14px}
+.pa-now{display:inline-block;margin-inline-start:6px;padding:1px 8px;border-radius:99px;background:var(--blue-soft);color:var(--blue-dark);font-size:12px;font-weight:800;vertical-align:middle}
+.pa-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.pa-stat{display:flex;flex-direction:column;align-items:center;background:var(--bg);border-radius:12px;padding:6px 4px}
+.pa-stat em{font-style:normal;font-size:18px}.pa-stat b{font-size:20px}.pa-stat small{font-size:12px;color:var(--muted);font-weight:700}
 .lesson.intro h2{font-size:24px;margin:6px 0}.lesson.intro p{font-size:18px;line-height:1.55;margin:0 4px 6px}
 .intro-emoji{font-size:84px;line-height:1.15}
 .map-go .ic{font-size:34px}.map-go b{display:block;font-size:21px}.map-go span span{font-size:14px;opacity:.95}
@@ -1275,7 +1299,8 @@ function timeUp() {
 function showTimeUp(first) {
   const m = $('#modal');
   const bell = h('span', { class: 'sticker' }, '⏰');
-  const more = n => h('button', { class: 'btn secondary small', onclick: () => { PlayTimer.extend(n); m.hidden = true; } }, `➕ עוד ${n} דקות`);
+  // adding minutes needs the parent code; "cancel" brings this window back
+  const more = n => h('button', { class: 'btn secondary small', onclick: () => ParentGate(() => { PlayTimer.extend(n); Lock.open = false; toast(`⏱️ נוספו ${n} דקות`); }, () => showTimeUp(false)) }, `➕ עוד ${n} דקות`);
   m.innerHTML = '';
   m.append(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' },
     h('div', { class: 'prompt' }, 'הזמן של המשחק נגמר! 🔔'),
@@ -1283,7 +1308,7 @@ function showTimeUp(first) {
     h('p', { class: 'sub' }, `${g('שיחקת', 'שיחקת')} היום ${state.timerMin} דקות. כל הכבוד! ההתקדמות נשמרה, ואפשר להמשיך בפעם הבאה מאותו מקום.`),
     h('button', { class: 'btn green wide', onclick: () => { m.hidden = true; Home(); } }, 'סיום 👋'),
     h('details', { class: 'parents', style: 'margin-top:12px;text-align:start' },
-      h('summary', null, 'להורים'),
+      h('summary', null, 'להורים 🔒'),
       h('div', { class: 'row' }, more(5), more(10)))));
   m.hidden = false;
   if (G) G.fromTo(bell, { rotation: -22 }, { rotation: 22, duration: .11, repeat: first ? 13 : 3, yoyo: true, ease: 'sine.inOut', onComplete() { G.set(bell, { rotation: 0 }); } });
@@ -1305,7 +1330,14 @@ function screen(title, showBack = true) {
 }
 // back: from a stage opened in 'review and practice' it goes back there, otherwise to the child's home
 let menu = 'home';
-$('#backBtn').addEventListener('click', () => !PID ? ProfilePicker() : menu === 'practice' && !Run && $('#screenTitle').textContent !== 'חזרה ושינון' ? Practice() : Home());
+$('#backBtn').addEventListener('click', () => {
+  const t = $('#screenTitle').textContent;
+  if (!PID) return ProfilePicker();
+  // inside the parents area (report, editing a child): back to the parents area
+  if (menu === 'parents' && Lock.open && t !== 'אזור ההורים') return ParentArea();
+  if (menu === 'practice' && !Run && t !== 'חזרה ושינון') return Practice();
+  Home();
+});
 
 function progressDots(total, current) {
   return h('div', { class: 'progress', 'aria-label': `סבב ${current + 1} מתוך ${total}` },
@@ -1373,6 +1405,7 @@ function goalBar() {
 }
 /* First screen: a new child gets the short intro, then everyone starts on the map. */
 function Start() {
+  Lock.open = false;
   if (Cloud.possible() && !Cloud.known()) return LoginScreen();
   if (!PID) return ProfilePicker();
   if (!store.get('intro', false)) {
@@ -1431,6 +1464,7 @@ function Home() {
   if (!PID) return ProfilePicker();
   endRun();
   Guard.reset();
+  Lock.open = false;
   const app = screen('אותיות באנגלית', false); menu = 'home';
   const p = me();
   const n = streak();
@@ -1452,31 +1486,10 @@ function Home() {
     h('button', { class: 'home-tile', onclick: () => LeaderBoard() }, h('span', { class: 'ic' }, '🏆'), h('b', null, 'טבלת האלופים'),
       h('small', null, `⭐ ${mapStars(mm)} במפה`)));
 
-  const goalSel = h('div', { class: 'seg', role: 'group', 'aria-label': 'יעד יומי' }, [5, 10, 15, 20].map(m =>
-    h('button', { class: m === state.goal ? 'on' : '', onclick: () => { state.goal = m; store.set('goal', m); Home(); } }, `${m} דק׳`)));
-
-  const parents = h('details', { class: 'parents' },
-    h('summary', null, 'להורים'),
-    h('div', { class: 'row', style: 'justify-content:flex-start' },
-      h('button', { class: 'btn small', onclick: () => ParentReport() }, '📊 דוח התקדמות'),
-      h('button', { class: 'btn secondary small', onclick: () => ProfilePicker() }, '👥 ילדים')),
-    h('p', { class: 'field' }, `יעד יומי של ${p.name}:`),
-    goalSel,
-    h('p', null, 'כשמגיעים ליעד היומי מקבלים מדבקה לאלבום, ויום אחרי יום נבנה רצף 🔥. סופרים רק זמן שבו באמת נוגעים במסך.'),
-    h('p', null, 'הילד מתקדם במפה: כל נושא מתחיל בשיעור, אחריו תרגול ובסוף בוחן. בכפתור "חזרה ושינון" נפתח כל שלב אחרי שהילד הגיע אליו במפה.'),
-    h('p', null, 'לכל ילד יש התקדמות משלו. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
-    kidsBox(),
-    accountBox(),
-    timerSettings(),
-    voiceSettings(),
-    speakSettings(),
-    installHelp(),
-    updateBox(),
-    h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
-    h('button', { class: 'reset-btn', onclick: resetAll }, `איפוס ההתקדמות של ${p.name}`));
-
   app.append(h('div', { class: 'kid-home' }, meBar, mapBtn, ...(resumeBtn ? [resumeBtn] : []), tiles,
-    h('div', { class: 'row' }, h('button', { class: 'link-btn', onclick: () => Intro(() => Home()) }, '❓ איך משחקים')), parents));
+    h('div', { class: 'row' },
+      h('button', { class: 'link-btn', onclick: () => Intro(() => Home()) }, '❓ איך משחקים'),
+      h('button', { class: 'link-btn', onclick: () => ParentArea() }, '👪 להורים 🔒'))));
   enter(mapBtn);
 }
 /* What opens in "review and practice": a stage opens once the child passed a map station of that kind,
@@ -1490,6 +1503,7 @@ function Practice() {
   if (!PID) return ProfilePicker();
   endRun();
   Guard.reset();
+  Lock.open = false;
   const app = screen('חזרה ושינון'); menu = 'practice';
   if (!levelOpen(state.level)) { state.level = topOpenLevel(); store.set('level', state.level); }
   const lv = curLevel();
@@ -1533,20 +1547,216 @@ function Practice() {
 function setCase(m) { state.caseMode = m; store.set('case', m); Practice(); }
 function setLevel(n) { if (!levelOpen(n)) return; state.level = n; store.set('level', n); Practice(); }
 function resetAll() {
+  if (!Lock.open) return;
   if (!confirm(`למחוק את כל הכוכבים, ההתקדמות והמדבקות של ${me().name}?`)) return;
   for (const k of PROFILE_KEYS) store.del(k);
   loadProfile(PID);
-  renderStars(); Home();
+  renderStars(); ParentArea();
 }
 
 /* =========================================================
    Voice settings (parents): pick the clearest English voice on this phone + speed
    ========================================================= */
-// re-draw the home screen but keep the parents area open on the card that was changed
+/* =========================================================
+   Parent code: 4 digits that keep the parents area away from the children
+   (switching child, editing or deleting a child, reset, timer, account, report).
+   A lock against children, not against hackers: only a salted SHA-256 of the code is kept,
+   and only on this phone (every phone gets its own code). 5 wrong tries = a 30 second wait.
+   ========================================================= */
+function sha256js(bytes) {   // for browsers without crypto.subtle (a file opened from WhatsApp)
+  const K = [], H = [], frac = x => (x - Math.floor(x)) * 4294967296 | 0;
+  for (let n = 2, c = 0; c < 64; n++) {
+    let prime = true; for (let d = 2; d * d <= n; d++) if (n % d === 0) { prime = false; break; }
+    if (prime) { if (c < 8) H[c] = frac(Math.pow(n, 1 / 2)); K[c++] = frac(Math.pow(n, 1 / 3)); }
+  }
+  const len = bytes.length, m = new Uint8Array(Math.ceil((len + 9) / 64) * 64);
+  m.set(bytes); m[len] = 0x80;
+  for (let k = 0; k < 4; k++) m[m.length - 1 - k] = len * 8 >>> 8 * k & 255;
+  const W = [], rot = (x, r) => x >>> r | x << 32 - r;
+  for (let i = 0; i < m.length; i += 64) {
+    for (let t = 0; t < 64; t++) W[t] = t < 16 ? m[i + 4 * t] << 24 | m[i + 4 * t + 1] << 16 | m[i + 4 * t + 2] << 8 | m[i + 4 * t + 3]
+      : W[t - 16] + (rot(W[t - 15], 7) ^ rot(W[t - 15], 18) ^ W[t - 15] >>> 3) + W[t - 7] + (rot(W[t - 2], 17) ^ rot(W[t - 2], 19) ^ W[t - 2] >>> 10) | 0;
+    let [a, b, c, d, e, f, x, y] = H;
+    for (let t = 0; t < 64; t++) {
+      const t1 = y + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + (e & f ^ ~e & x) + K[t] + W[t] | 0;
+      const t2 = (rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + (a & b ^ a & c ^ b & c) | 0;
+      y = x; x = f; f = e; e = d + t1 | 0; d = c; c = b; b = a; a = t1 + t2 | 0;
+    }
+    [a, b, c, d, e, f, x, y].forEach((v, k) => { H[k] = H[k] + v | 0; });
+  }
+  return H.map(v => (v >>> 0).toString(16).padStart(8, '0')).join('');
+}
+const toHex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+async function sha256hex(text) {
+  const bytes = new TextEncoder().encode(text);
+  try { if (window.crypto && crypto.subtle) return toHex(await crypto.subtle.digest('SHA-256', bytes)); } catch (e) {}
+  return sha256js(bytes);
+}
+const Lock = {
+  open: false,   // opened for one visit to the parents area; the child's screens close it again
+  has() { const p = RAW.get('pin', null); return !!(p && p.salt && p.hash); },
+  hash(pin, salt) { return sha256hex(salt + ':' + pin); },
+  async set(pin) {
+    const r = new Uint8Array(16);
+    try { crypto.getRandomValues(r); } catch (e) { r.forEach((v, i) => { r[i] = Math.random() * 256; }); }
+    const salt = toHex(r.buffer);
+    RAW.set('pin', { salt, hash: await this.hash(pin, salt) }); RAW.del('pinWait');
+  },
+  async check(pin) { const p = RAW.get('pin', null); return !!(p && p.salt) && await this.hash(pin, p.salt) === p.hash; },
+  // kept in storage, so closing and opening the game does not skip the wait
+  wait() { const w = RAW.get('pinWait', null); return w && w.until > Date.now() ? Math.ceil((w.until - Date.now()) / 1000) : 0; },
+  fail() { const n = (RAW.get('pinWait', {}).n || 0) + 1; RAW.set('pinWait', n >= 5 ? { n: 0, until: Date.now() + 30000 } : { n }); },
+  pass() { RAW.del('pinWait'); this.open = true; },
+};
+const parentOnly = fn => Lock.open ? fn() : ParentGate(fn);
+/* The code window (on top of the screen, so a game in the middle is not lost).
+   No code yet on this phone: first a sum for grown-ups, then the parent picks a code and types it twice.
+   Forgot the code: on the site the parent signs in again with the same Google account; in a file, the sum.
+   mode 'new' = pick a new code (the parent is already inside). */
+function ParentGate(then, cancel, mode) {
+  const m = $('#modal');
+  let step = mode === 'new' ? 'new' : Lock.has() ? 'enter' : 'adult';
+  let code = '', first = '', msg = '', busy = false, q = null, tick = null;
+  const card = h('div', { class: 'card pin-card', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'קוד הורים' });
+  const close = () => { clearInterval(tick); document.removeEventListener('keydown', onKey); m.hidden = true; m.replaceChildren(); };
+  const quit = () => { close(); if (cancel) cancel(); };
+  const done = () => { close(); Lock.pass(); then(); };
+  const newQ = () => { q = { a: 13 + Math.floor(Math.random() * 17), b: 12 + Math.floor(Math.random() * 8) }; };
+  const waiting = () => (step === 'enter' || step === 'adult') && Lock.wait() > 0;
+  const press = k => {
+    if (busy || waiting()) return;
+    if (k === '⌫') code = code.slice(0, -1); else if (code.length < 4) code += k;
+    msg = ''; draw();
+    if (code.length === 4) submit();
+  };
+  const submit = async () => {
+    busy = true;
+    if (step === 'enter') {
+      if (await Lock.check(code)) return done();
+      Lock.fail(); msg = Lock.wait() ? '' : 'הקוד לא נכון. נסו שוב.';
+    } else if (step === 'new') { first = code; step = 'again'; }
+    else if (code === first) { await Lock.set(code); toast('🔒 קוד ההורים נשמר'); return done(); }
+    else { msg = 'הקודים לא זהים. בוחרים שוב.'; step = 'new'; }
+    code = ''; busy = false; draw();
+    if (msg) shake($('.pin-dots', card));
+  };
+  const forgot = async () => {
+    if (Cloud.possible() && Cloud.known() && navigator.onLine) {
+      busy = true; msg = '⏳ נכנסים עם גוגל...'; draw();
+      const ok = await Cloud.reauth();
+      busy = false; msg = ok ? '' : Cloud.err; if (ok) step = 'new';
+      return draw();
+    }
+    step = 'adult'; newQ(); msg = ''; draw();
+  };
+  const onKey = e => {
+    if (e.key === 'Escape') return quit();
+    if (step === 'adult') return;   // the answer box takes the keys
+    if (/^[0-9]$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('⌫');
+  };
+  const TEXT = {
+    enter: ['🔒 אזור ההורים', 'מקלידים את קוד ההורים'],
+    new: ['🔑 בוחרים קוד הורים', 'קוד של 4 ספרות. בלעדיו ילדים לא יוכלו להחליף ילד, למחוק התקדמות או לשנות את הטיימר.'],
+    again: ['🔑 בוחרים קוד הורים', 'מקלידים את אותו קוד שוב'],
+  };
+  function draw() {
+    clearInterval(tick); tick = null;
+    const wait = waiting() ? Lock.wait() : 0;
+    if (wait) tick = setInterval(() => { if (!Lock.wait()) draw(); else { const b = $('.pin-wait b', card); if (b) b.textContent = Lock.wait(); } }, 1000);
+    const [title, sub] = step === 'adult'
+      ? ['👋 זה רק להורים', Lock.has() ? 'כדי לבחור קוד חדש, פותרים תרגיל למבוגרים:' : 'עוד אין קוד הורים בטלפון הזה. כדי לבחור קוד, קודם פותרים תרגיל למבוגרים:']
+      : TEXT[step];
+    const kids = [h('div', { class: 'prompt' }, title), h('p', { class: 'sub', style: 'margin:0' }, sub)];
+    let focus = null;
+    if (wait) kids.push(h('p', { class: 'pin-wait' }, '⏳ יותר מדי ניסיונות. אפשר לנסות שוב בעוד ', h('b', null, wait), ' שניות.'));
+    else if (step === 'adult') {
+      const inp = focus = h('input', { class: 'text-in pin-ans', type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: '4', 'aria-label': 'התשובה' });
+      const check = () => {
+        if (+inp.value.trim() === q.a * q.b) { step = 'new'; msg = ''; return draw(); }
+        Lock.fail(); newQ(); msg = Lock.wait() ? '' : 'לא נכון. הנה תרגיל אחר.'; draw();
+      };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+      kids.push(h('div', { class: 'pin-q', dir: 'ltr' }, `${q.a} × ${q.b} = ?`), inp,
+        h('div', { class: 'row' }, h('button', { class: 'btn green', type: 'button', onclick: check }, 'בדיקה')));
+    } else {
+      kids.push(h('div', { class: 'pin-dots', role: 'img', 'aria-label': `${code.length} מתוך 4 ספרות` }, [0, 1, 2, 3].map(i => h('i', { class: i < code.length ? 'on' : '' }))),
+        h('div', { class: 'pin-keys', dir: 'ltr' }, ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(k => k
+          ? h('button', { type: 'button', class: 'pin-key', 'aria-label': k === '⌫' ? 'מחיקה' : k, disabled: busy, onclick: () => press(k) }, k) : h('span'))));
+    }
+    kids.push(h('p', { class: 'pin-msg', role: 'alert' }, msg),
+      h('div', { class: 'row', style: 'margin-top:4px' },
+        step === 'enter' ? h('button', { class: 'link-btn', type: 'button', disabled: busy, onclick: forgot }, 'שכחתי את הקוד') : null,
+        h('button', { class: 'btn secondary small', type: 'button', onclick: quit }, 'ביטול')));
+    card.replaceChildren(...kids);
+    if (focus) setTimeout(() => focus.focus(), 50);
+  }
+  if (step === 'adult') newQ();
+  if (Cloud.possible()) Cloud.load().catch(() => {});   // ready before "forgot", so the Google window opens right away
+  m.replaceChildren(card); m.hidden = false;
+  document.addEventListener('keydown', onKey);
+  draw();
+}
+// re-draw the parents area on the card that was changed
 function reopenParents(id) {
-  Home();
-  const d = $('details.parents'); if (d) d.open = true;
+  ParentArea();
   const el = document.getElementById(id); if (el) el.scrollIntoView({ block: 'center' });
+}
+// the report of any child, without changing who plays: leaving the report brings back the child who played
+function kidReport(id) {
+  const back = PID;
+  if (!back || id === back) { if (id !== PID) loadProfile(id); return ParentReport(); }
+  loadProfile(id); RAW.set('active', back);
+  ParentReport();
+  cleanup = () => loadProfile(back);
+}
+/* The parents area (behind the code): every child at a glance, then the settings */
+function ParentArea() {
+  if (!Lock.open) return ParentGate(ParentArea);
+  if (!Profiles.list().length) return ProfileForm();
+  endRun();
+  Guard.reset();
+  const app = screen('אזור ההורים'); menu = 'parents';
+  const p = me(), today = dayKey();
+  const stat = (ic, n, t) => h('span', { class: 'pa-stat' }, h('em', null, ic), h('b', null, n), h('small', null, t));
+  const kids = h('div', { class: 'pa-kids', id: 'kidsBox' }, kidBoard().map(r => {
+    const min = Math.floor((RAW.get(`p${r.id}_time`, {})[today] || 0) / 60);
+    const playing = r.g === 'f' ? 'משחקת' : 'משחק';
+    return h('div', { class: 'card pa-kid' + (r.id === PID ? ' me' : '') },
+      h('div', { class: 'pa-top' }, h('span', { class: 'av' }, r.avatar),
+        h('span', { class: 'nm' }, h('b', null, r.name, r.id === PID ? h('span', { class: 'pa-now' }, playing + ' עכשיו') : null),
+          h('small', null, `🗺️ תחנה ${r.at + 1}: ${stationTitle(stationAt(r.at))}`))),
+      h('div', { class: 'pa-stats' }, stat('⭐', r.mstars, 'כוכבים במפה'), stat('⏱️', min, 'דקות היום'), stat('🔥', r.fire, 'ימים ברצף')),
+      h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:10px' },
+        h('button', { class: 'btn small', onclick: () => kidReport(r.id) }, '📊 דוח'),
+        h('button', { class: 'btn secondary small', onclick: () => ProfileForm(r.id, () => reopenParents('kidsBox')) }, '✏️ עריכה'),
+        r.id === PID ? null : h('button', { class: 'btn secondary small', onclick: () => {
+          loadProfile(r.id); renderStars(); toast(`עכשיו ${playing}: ${r.avatar} ${r.name}`); Start();
+        } }, `▶ ${r.name} ${playing}`)));
+  }));
+  const goalSel = p ? h('div', { class: 'seg', role: 'group', 'aria-label': 'יעד יומי' }, [5, 10, 15, 20].map(mn =>
+    h('button', { class: mn === state.goal ? 'on' : '', onclick: () => { state.goal = mn; store.set('goal', mn); reopenParents('goalBox'); } }, `${mn} דק׳`))) : null;
+  const mine = p ? [
+    h('div', { class: 'sec-title' }, `ההגדרות של ${p.avatar} ${p.name}`),
+    h('div', { class: 'card', id: 'goalBox', style: 'margin:12px 0' },
+      h('b', null, '🎯 יעד יומי (דקות)'), h('div', { style: 'margin-top:8px' }, goalSel),
+      h('p', { style: 'margin:8px 0 0;font-size:13px' }, 'כשמגיעים ליעד היומי מקבלים מדבקה לאלבום, ויום אחרי יום נבנה רצף 🔥. סופרים רק זמן שבו באמת נוגעים במסך.')),
+    timerSettings(),
+    h('div', { class: 'row' }, h('button', { class: 'reset-btn', onclick: resetAll }, `איפוס ההתקדמות של ${p.name}`))] : [];
+  const pinBox = h('div', { class: 'card', id: 'pinBox', style: 'margin:12px 0' },
+    h('b', null, '🔒 קוד ההורים'),
+    h('p', { style: 'margin:6px 0' }, 'הקוד שומר שילדים לא יחליפו ילד, לא ימחקו התקדמות ולא ישנו את הטיימר. הוא נשמר רק בטלפון הזה, ובכל טלפון בוחרים קוד משלו. זו נעילה נגד ילדים, לא הגנה מפני פריצה.'),
+    h('button', { class: 'btn secondary small', onclick: () => ParentGate(() => reopenParents('pinBox'), null, 'new') }, '🔑 החלפת הקוד'));
+  app.append(
+    h('div', { class: 'sec-title', style: 'margin-top:4px' }, '👪 הילדים'), kids,
+    h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:10px' }, h('button', { class: 'btn small', onclick: () => ProfileForm() }, '➕ ילד חדש')),
+    ...mine,
+    h('div', { class: 'sec-title' }, '⚙️ הטלפון והחשבון'),
+    pinBox, accountBox(), voiceSettings(), speakSettings(), installHelp(), updateBox(),
+    h('p', null, 'הילד מתקדם במפה: כל נושא מתחיל בשיעור, אחריו תרגול ובסוף בוחן. בכפתור "חזרה ושינון" נפתח כל שלב אחרי שהילד הגיע אליו במפה.'),
+    h('p', null, 'לכל ילד יש התקדמות משלו. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
+    h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
+    h('div', { class: 'row' }, h('button', { class: 'btn green wide', onclick: () => Home() }, '🔒 סיום ונעילה')));
+  enter(kids);
 }
 function timerSettings() {
   const p = me();
@@ -1571,7 +1781,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = 'cdaf492c', APP_BUILT = '16.11.2026 20:38';
+const APP_VERSION = '6b436ab5', APP_BUILT = '16.11.2026 22:24';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -1673,6 +1883,27 @@ const Cloud = {
       return false;
     }
   },
+  // "forgot the parent code": the same Google account signs in again (another account is refused)
+  async reauth() {
+    this.err = '';
+    try {
+      await this.load();
+      const u = this.auth.currentUser;
+      if (!u) throw { code: 'signed-out' };
+      const p = new this.fa.GoogleAuthProvider();
+      p.setCustomParameters({ prompt: 'select_account' });
+      await this.fa.reauthenticateWithPopup(u, p);
+      return true;
+    } catch (e) {
+      const c = (e && e.code) || '';
+      this.err = c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request' ? ''
+        : c === 'auth/user-mismatch' ? 'זה חשבון גוגל אחר. צריך להיכנס עם החשבון של ההורה שמחובר למשחק.'
+        : c === 'auth/popup-blocked' ? 'הדפדפן חסם את חלון ההתחברות. מאשרים חלונות קופצים לאתר הזה ומנסים שוב.'
+        : c === 'signed-out' ? 'צריך אינטרנט כדי לבדוק את החשבון. נסו שוב כשיש חיבור.'
+        : 'הבדיקה מול גוגל לא הצליחה. בודקים שיש אינטרנט ומנסים שוב.';
+      return false;
+    }
+  },
   async signOut() {
     if (Sync.pending()) await Sync.push();
     if (Sync.pending()) {
@@ -1680,7 +1911,7 @@ const Cloud = {
     } else if (!confirm('להתנתק? הילדים וההתקדמות שמורים בחשבון, ויחזרו כשמתחברים שוב.')) return;
     try { await this.load(); await this.fa.signOut(this.auth); } catch (e) {}
     this.setUser(null);
-    Sync.wipeLocal(); RAW.del('owner');
+    Sync.wipeLocal(); RAW.del('owner'); RAW.del('pin'); RAW.del('pinWait');
     renderStars(); LoginScreen();
   },
   redraw() { const b = document.getElementById('acctBox'); if (b && b._draw) b._draw(); },
@@ -1807,6 +2038,7 @@ const Sync = {
       await this.push();
       if (changed && document.querySelector('#app .kid-home, #app .who')) { renderStars(); Home(); }
       else if (changed && document.querySelector('#app .stage-list')) { renderStars(); Practice(); }
+      else if (changed && Lock.open && document.querySelector('#app .pa-kids')) { renderStars(); ParentArea(); }
     } catch (e) {}
   },
   wipeLocal() {
@@ -1921,7 +2153,7 @@ function installHelp() {
   if (location.protocol === 'file:') return h('p', null, '📲 אפשר להתקין את המשחק כאפליקציה עם אייקון: פתחו אותו מהקישור לאתר, לא מקובץ.');
   if (installEvt) return h('p', null, h('button', { class: 'btn green small', onclick: async () => {
     try { installEvt.prompt(); await installEvt.userChoice; } catch (e) {}
-    installEvt = null; Home();
+    installEvt = null; ParentArea();
   } }, '📲 התקנה כאפליקציה'));
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   return h('p', null, '📲 התקנה כאפליקציה: ', ios
@@ -1935,6 +2167,8 @@ function installHelp() {
 function ProfilePicker(editing) {
   const list = Profiles.list();
   if (!list.length) return ProfileForm();
+  // a child is playing: switching to another child (or editing) is for parents. No child yet = anyone picks.
+  if ((PID || editing) && !Lock.open) return ParentGate(() => ProfilePicker(editing));
   const app = screen(editing ? 'עריכת ילדים' : 'מי משחק?', !!PID || !!editing);
   app.append(h('div', { class: 'home-hello' }, h('h1', null, editing ? 'על מי לערוך? ✏️' : 'מי משחק עכשיו? 👋')),
     h('div', { class: 'who' + (editing ? ' editing' : '') },
@@ -1944,27 +2178,18 @@ function ProfilePicker(editing) {
       } },
         h('span', { class: 'av' }, p.avatar), h('span', { class: 'nm' }, p.name),
         h('small', null, editing ? '✏️ עריכה' : `⭐ ${RAW.get(`p${p.id}_stars`, 0)}`))),
-      editing ? null : h('button', { class: 'who-card add', onclick: () => ProfileForm() }, h('span', { class: 'av' }, '➕'), 'ילד חדש')),
+      editing ? null : h('button', { class: 'who-card add', onclick: () => parentOnly(() => ProfileForm()) }, h('span', { class: 'av' }, '➕'), 'ילד חדש')),
     h('div', { class: 'row', style: 'margin-top:14px' }, editing
       ? h('button', { class: 'btn green', onclick: () => ProfilePicker() }, 'סיום ✓')
-      : h('button', { class: 'btn secondary small', onclick: () => ProfilePicker(true) }, '✏️ עריכת שמות ודמויות')),
+      : h('button', { class: 'btn secondary small', onclick: () => ProfilePicker(true) }, '✏️ עריכת שמות ודמויות 🔒')),
     h('p', { class: 'sub', style: 'margin-top:16px' }, 'לכל ילד יש התקדמות, כוכבים ומדבקות משלו. ',
       Sync.on() ? 'הכול נשמר בחשבון של ההורה.' : 'הכול נשמר רק בטלפון הזה.'));
   enter($('.who', app));
 }
-// parents area: every child with an edit button
-function kidsBox() {
-  return h('div', { class: 'card', id: 'kidsBox', style: 'margin:12px 0' },
-    h('b', null, '👥 הילדים'),
-    h('div', { class: 'kids-list' }, Profiles.list().map(p => h('div', { class: 'kid-row' },
-      h('span', { class: 'av' }, p.avatar), h('span', { class: 'nm' }, p.name, p.id === PID ? h('small', null, ' (משחק/ת עכשיו)') : ''),
-      h('button', { class: 'btn secondary small', onclick: () => ProfileForm(p.id, () => reopenParents('kidsBox')) }, '✏️ עריכה')))),
-    h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:8px' },
-      h('button', { class: 'btn small', onclick: () => ProfileForm() }, '➕ ילד חדש'),
-      h('button', { class: 'btn secondary small', onclick: () => LeaderBoard() }, '🏆 טבלת האלופים')));
-}
 // back: where to return after editing (from the parents area it goes back there, without switching child)
 function ProfileForm(id, back) {
+  // editing a child, or adding one when there are children already, is for parents
+  if ((id || Profiles.list().length) && !Lock.open) return ParentGate(() => ProfileForm(id, back));
   const old = id ? Profiles.get(id) : null;
   const app = screen(old ? 'עריכת פרופיל' : 'ילד חדש', Profiles.list().length > 0);
   let avatar = old ? old.avatar : AVATARS[0], gender = old ? old.g : 'm';
@@ -2023,7 +2248,8 @@ const legend = () => h('div', { class: 'legend' },
   h('span', null, h('i', { style: 'background:var(--orange)' }), 'עוד מתאמנים'),
   h('span', null, h('i', { style: 'background:var(--card);box-shadow:0 0 0 1px var(--line)' }), 'עוד לא נלמדה'));
 function MyArea() {
-  const app = screen('האזור שלי');
+  Lock.open = false;
+  const app = screen('האזור שלי'); menu = 'home';
   const p = me();
   const album = h('div', { class: 'album' }, STICKERS.map(s => state.stickers.includes(s)
     ? h('span', null, s) : h('span', { class: 'locked' }, '?')));
@@ -2040,8 +2266,8 @@ function MyArea() {
     h('div', { class: 'sec-title' }, g('האותיות שאני יודע', 'האותיות שאני יודעת')),
     letterGrid(), legend(),
     h('div', { class: 'row' },
-      h('button', { class: 'btn secondary small', onclick: () => ProfileForm(PID) }, '✏️ עריכת הפרופיל'),
-      h('button', { class: 'btn secondary small', onclick: () => ProfilePicker() }, '👥 החלפת שחקן')));
+      h('button', { class: 'btn secondary small', onclick: () => ProfileForm(PID) }, '✏️ עריכת הפרופיל 🔒'),
+      h('button', { class: 'btn secondary small', onclick: () => ProfilePicker() }, '👥 החלפת שחקן 🔒')));
   enter(album);
 }
 
@@ -2053,7 +2279,8 @@ function lastDays(n) {
   return Array.from({ length: n }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (n - 1 - i)); return d; });
 }
 function ParentReport() {
-  const app = screen('דוח להורים');
+  if (!Lock.open) return ParentGate(ParentReport);
+  const app = screen('דוח להורים'); menu = 'parents';
   const p = me();
   const days = lastDays(7);
   const secs = days.map(d => state.time[dayKey(d)] || 0);
@@ -4076,6 +4303,7 @@ function landSvg(kind, x, y) {
 function MapScreen() {
   endRun();
   const m = mapState(), at = m.at, kid = me();
+  Lock.open = false;
   const app = screen('המפה'); menu = 'home';
   app.append(h('div', { class: 'map-head' }, h('b', null, `⭐ ${mapStars(m)} כוכבים במפה`),
     h('button', { class: 'btn small', onclick: () => LeaderBoard() }, '🏆 טבלה'), h('span', null, `תחנה ${at + 1}`)));
