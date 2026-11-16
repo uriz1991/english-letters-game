@@ -321,6 +321,18 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .speak-msg{margin:8px 0 0;font-size:15px}
 .check-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:700}
 .check-row input{width:22px;height:22px}
+.lesson{background:var(--card);border-radius:var(--radius);padding:16px 14px;box-shadow:0 4px 0 var(--line);text-align:center}
+.ls-letter{display:flex;align-items:baseline;justify-content:center;gap:18px;margin:0 auto 6px;border:0;background:var(--blue-soft);border-radius:24px;padding:6px 26px;box-shadow:0 4px 0 var(--line);direction:ltr}
+.ls-letter .en{font-size:96px;line-height:1.1;font-weight:800;color:var(--ink)}
+.ls-letter small{font-size:22px;align-self:center}
+.ls-snd{color:var(--orange);white-space:nowrap}
+.ls-words{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 12px}
+.ls-word{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:#fff;border-radius:20px;padding:12px 6px;box-shadow:0 4px 0 var(--line);min-height:44px}
+.ls-word .emoji{font-size:56px;line-height:1.15}
+.ls-word .w{font-size:28px;font-weight:800;direction:ltr}
+.ls-word .w b{color:var(--orange)}
+.ls-word .he{font-size:16px;color:var(--muted)}
+.ls-sum{display:flex;gap:14px;justify-content:center;font-size:48px;font-weight:800;margin:4px 0 10px;direction:ltr}
 .mini-ear{border:0;background:#fff;border-radius:10px;padding:2px 8px;margin-inline-start:6px;font-size:18px;box-shadow:0 2px 0 var(--line)}
 </style>
 </head>
@@ -3636,6 +3648,7 @@ const KIND = {
   chat: { icon: '💭', name: 'שיחה', run: () => StageChat() },
   digraph: { icon: '🔤', name: 'צירופי אותיות', run: () => StageDigraph() },
   chest: { icon: '🎁', name: 'תיבת הפתעה' },
+  learn: { icon: '📚', name: 'לומדים' },
 };
 const PHASES = { 1: 'אותיות, מילים וכתיבה', 2: 'מילים ומבחן כתיבה', 3: 'ביטויים של כל יום', 4: 'בונים משפטים', 5: 'שיחות', 6: 'תרגול בלי סוף' };
 const ENDLESS_PHASE = 6;
@@ -3660,6 +3673,8 @@ const MAP = (() => {
     const K = [...known], z = zoneOf(gi), level = findLetter(letters[0]).lvl;
     const base = { phase: 1, letters, known: K, level, opts: Math.min(z.opts, K.length), pct: z.pct, tag: grp, key: grp };
     const words = fitWords({ known: K }).length;
+    // map v3: every block starts with a lesson (learn first, then practise). v: 3 keeps it out of MAP_V1.
+    add({ ...base, kind: 'learn', v: 3, title: 'לומדים: ' + letters.join(' ') });
     add({ ...base, kind: 'listen' });
     add({ ...base, kind: 'pairs', letters: [...letters, ...K.filter(x => !letters.includes(x)).slice(-4)] });
     add({ ...base, kind: 'write', rounds: 2 });
@@ -3728,7 +3743,7 @@ const stationTitle = s => s.title || (s.quiz ? `🏁 בוחן: ${KIND[s.kind].na
 const MAP_V1 = MAP.filter(s => s.v === 1);
 const v1Id = i => i < MAP_V1.length ? MAP_V1[i].id : 'e:' + (i - MAP_V1.length);
 function stationIndex(id) {
-  if (/^e:d+$/.test(id)) return MAP.length + +id.slice(2);
+  if (/^e:\d+$/.test(id)) return MAP.length + +id.slice(2);
   const i = MAP.findIndex(s => s.id === id); return i;
 }
 function firstOpen(pass) { let i = 0; while (stationAt(i).id in pass) i++; return i; }
@@ -3739,7 +3754,10 @@ function normMap(m) {
     for (let i = 0; i < at; i++) pass[v1Id(i)] = Math.max(1, Math.min(3, best[i] || 1));
     m = { v: 2, pass };
   }
-  return { v: 2, pass: m.pass || {}, at: firstOpen(m.pass || {}), best: {} };
+  const pass = { ...(m.pass || {}) };
+  // a lesson added later before a block the child already started counts as done (no going back to learn what was already practised)
+  MAP.forEach((s, i) => { if (s.kind === 'learn' && !(s.id in pass) && MAP[i + 1] && MAP[i + 1].id in pass) pass[s.id] = 1; });
+  return { v: 2, pass, at: firstOpen(pass), best: {} };
 }
 function mapState() {
   const raw = store.get('map', null);
@@ -3747,7 +3765,7 @@ function mapState() {
   if (!m) {
     // a child who already knows letters from before starts after them, not from zero
     const pass = {};
-    for (const s of MAP) { if (s.phase !== 1 || s.kind === 'chest' || !s.letters.every(L => Mastery.isKnown('L:' + L))) break; pass[s.id] = 3; }
+    for (const s of MAP) { if (s.phase !== 1 || s.kind === 'chest' || !s.letters.every(L => Mastery.isKnown('L:' + L))) break; pass[s.id] = s.kind === 'learn' ? 1 : 3; }
     m = { v: 2, pass, at: firstOpen(pass), best: {} };
   }
   if (!raw || raw.v !== 2) saveMap(m);
@@ -3765,7 +3783,8 @@ function startStation(i) {
   const s = stationAt(i);
   if ((i > m.at && !(s.id in m.pass)) || !canPlay()) return;
   if (s.kind === 'chest') return openChest(i);
-  Run = { ...s, points: 0, max: 0, replay: s.id in m.pass };
+  if (s.kind === 'learn') return Lesson(i);
+  Run ={ ...s, points: 0, max: 0, replay: s.id in m.pass };
   if (s.dyn) {
     // endless practice: whatever was hard lately, otherwise a few random letters
     const weak = ALL_ABC.filter(L => Mastery.isWeak('L:' + L));
@@ -3824,6 +3843,61 @@ function openChest(i) {
     h('div', { class: 'row' }, h('button', { class: 'btn green', onclick: () => startStation(mapState().at) }, 'לתחנה הבאה ←')),
     h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה'))));
   if (got) burst(chest, 30);
+}
+/* Lesson station: learn before practising. Card after card from the game's own content, no points and no wrong answers.
+   Reaching the last card passes the station (1 star, so lessons do not count like practice on the leaderboard). */
+function lessonCards(s) {
+  if (s.phase === 1) return s.letters.map(L => letterLesson(findLetter(L)));
+  return [];
+}
+// one letter: both shapes, its sound in Hebrew, and its two picture words (tap to hear)
+function letterLesson(x) {
+  const l = x.L.toLowerCase(), atEnd = x.kws.some(k => k.end);
+  const say = () => Speech.en(`${x.L}. ${x.kws.map(k => k.w).join('. ')}.`, .7);
+  const word = w => { const at = atEnd ? w.lastIndexOf(l) : w.indexOf(l); return at < 0 ? w : [w.slice(0, at), h('b', null, w[at]), w.slice(at + 1)]; };
+  return {
+    say,
+    body: () => [
+      h('button', { class: 'ls-letter', type: 'button', 'aria-label': 'השמע את האות ' + x.L, onclick: e => { pop(e.currentTarget); Speech.en(`${l}, ${x.kws[0].w}`, .7); } },
+        h('span', { class: 'en' }, x.L), h('span', { class: 'en' }, l), h('small', null, '🔊')),
+      h('p', { class: 'prompt' }, ...bi(`האות ${x.L} נשמעת כמו `), h('span', { class: 'ls-snd' }, x.snd)),
+      atEnd ? h('p', { class: 'hint blue' }, ...bi(`את ${x.L} שומעים בדרך כלל בסוף המילה.`)) : null,
+      h('div', { class: 'ls-words' }, x.kws.map(k => h('button', { class: 'ls-word', type: 'button', onclick: e => { pop(e.currentTarget); Speech.en(k.w, .7); } },
+        h('span', { class: 'emoji' }, k.e), h('span', { class: 'en w' }, ...[].concat(word(k.w))), h('span', { class: 'he' }, k.he)))),
+      h('p', { class: 'sub' }, g('לחץ על התמונות כדי לשמוע', 'לחצי על התמונות כדי לשמוע')),
+    ],
+  };
+}
+function Lesson(i) {
+  endRun();
+  const s = stationAt(i), cards = lessonCards(s);
+  let k = 0;
+  const done = () => {
+    const m = mapState(), first = !(s.id in m.pass);
+    if (first) { m.pass[s.id] = 1; saveMap(m); }
+    const app = screen(stationTitle(s));
+    const big = h('div', { class: 'big' }, '🎯');
+    app.append(h('div', { class: 'end' }, big,
+      h('h2', null, 'למדת! עכשיו מתאמנים 💪'),
+      s.letters.length ? h('div', { class: 'ls-sum en' }, s.letters.map(L => h('span', null, L + L.toLowerCase()))) : null,
+      h('p', { class: 'sub' }, 'בתחנות הבאות מתרגלים את מה שלמדת, ובסוף יש בוחן ועולים שלב.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn green', onclick: () => startStation(mapState().at) }, first ? 'לתרגול ←' : 'לתחנה הבאה ←')),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn orange', onclick: () => Lesson(i) }, '🔁 ללמוד שוב'),
+        h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה'))));
+    if (first) burst(big, 18);
+  };
+  const show = () => {
+    if (k >= cards.length) return done();
+    const c = cards[k], app = screen(stationTitle(s));
+    app.append(progressDots(cards.length, k), h('div', { class: 'lesson' }, ...c.body().filter(Boolean)),
+      h('div', { class: 'row' },
+        k > 0 ? h('button', { class: 'btn secondary', onclick: () => { k--; show(); } }, '→ הקודם') : null,
+        h('button', { class: 'btn green', onclick: () => { k++; show(); } }, k === cards.length - 1 ? 'סיימתי ✓' : 'הבא ←')));
+    enter($('.lesson', app));
+    setTimeout(c.say, 350);
+  };
+  show();
 }
 /* Leaderboard of the children on this account: who got furthest on the map. Can be sent to friends in WhatsApp. */
 function kidBoard() {
@@ -3982,11 +4056,12 @@ function MapScreen() {
     const best = bestAt(m, i), kind = s.id in m.pass ? 'done' : i === at ? 'now' : 'locked';
     const label = `תחנה ${i + 1}: ${stationTitle(s)}` + (kind === 'done' ? `, ${best} כוכבים` : kind === 'locked' ? ', נעולה' : ', התחנה שלך');
     const face = s.kind === 'chest' ? `<text y="8" text-anchor="middle" font-size="24">🎁</text>`
+      : s.kind === 'learn' ? `<text y="8" text-anchor="middle" font-size="22">📚</text>`
       : `<text y="6.5" text-anchor="middle" font-size="${i >= 99 ? 14 : 17}" font-weight="800" fill="${kind === 'done' ? '#7A4A06' : kind === 'now' ? '#fff' : dark ? '#D5E8EE' : '#6F685C'}">${i + 1}</text>`;
     const disc = kind === 'done' ? `<circle r="22" fill="#F7C948" stroke="#B9790F" stroke-width="4"/><circle r="15.5" fill="none" stroke="#FFE38A" stroke-width="2"/>`
       : kind === 'now' ? `<circle class="mring" r="27" fill="none" stroke="#FFF3B0" stroke-width="7"/><circle r="26" fill="#FF8A3D" stroke="#C2551A" stroke-width="4"/><circle r="19" fill="none" stroke="#FFB27A" stroke-width="2"/>`
       : `<circle r="21" fill="${dark ? '#56717D' : '#CFC8BB'}" stroke="${dark ? '#34505C' : '#958D80'}" stroke-width="4"/>`;
-    const stars = kind === 'done' ? [-16, 0, 16].map((dx, k) => `<polygon transform="translate(${dx} ${k === 1 ? -35 : -31})" points="${STAR_PTS}" fill="${k < best ? '#FFD23F' : dark ? '#4A6470' : '#E2DACB'}" stroke="${k < best ? '#B9790F' : dark ? '#33505C' : '#B8AE9C'}" stroke-width="1.5"/>`).join('') : '';
+    const stars = kind === 'done' && s.kind !== 'learn' ? [-16, 0, 16].map((dx, k) => `<polygon transform="translate(${dx} ${k === 1 ? -35 : -31})" points="${STAR_PTS}" fill="${k < best ? '#FFD23F' : dark ? '#4A6470' : '#E2DACB'}" stroke="${k < best ? '#B9790F' : dark ? '#33505C' : '#B8AE9C'}" stroke-width="1.5"/>`).join('') : '';
     const flag = s.quiz ? `<text x="20" y="-16" font-size="17">🏁</text>` : '';
     const meTag = kind === 'now' ? `<g class="mme"><path d="M-6-37L0-29L6-37Z" fill="#fff"/><circle cy="-54" r="19" fill="#fff" stroke="#FF8A3D" stroke-width="4"/><text y="-46" text-anchor="middle" font-size="22">${escSvg(kid ? kid.avatar : '⭐')}</text></g>` : '';
     st[kind === "now" ? "unshift" : "push"](`<g class="ms ms-${kind}" data-i="${i}" role="button" tabindex="${kind === 'locked' ? -1 : 0}" aria-label="${escSvg(label)}" aria-disabled="${kind === 'locked'}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><ellipse cy="15" rx="24" ry="7" fill="rgba(0,0,0,.2)"/><circle r="34" fill="transparent"/><g class="mbody">${disc}${face}</g>${stars}${flag}${meTag}</g>`);
