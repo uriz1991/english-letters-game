@@ -301,6 +301,11 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .say-card{text-align:center}
 .say-card .big-en{font-size:28px;display:block;margin-bottom:2px}
 .say-card p{margin:6px 0}
+.gap-line{direction:ltr;text-align:center;font-size:28px;font-weight:800;margin:14px 0 6px;line-height:1.5}
+.gap{display:inline-block;min-width:64px;border-bottom:4px solid var(--blue);color:var(--blue)}
+.row-opts{flex-direction:row;flex-wrap:wrap;justify-content:center}
+.row-opts .opt{flex:0 1 auto;min-width:96px;font-size:24px}
+.link-word .big-word{font-size:64px;font-weight:800;line-height:1.1}
 .speak{margin-top:10px;padding-top:10px;border-top:2px dashed rgba(0,0,0,.08)}
 .speak-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .speak-btn{background:var(--orange,#f08a24);box-shadow:0 4px 0 #b9651a}
@@ -1303,11 +1308,11 @@ function EndScreen(stageKey, earned, again, nextIdx) {
    Home
    ========================================================= */
 const STAGES = [];
-const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה', talk: 'מדברים' };
+const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה', talk: 'מדברים', link: 'מילים מחברות', sentence: 'בונים משפט' };
 const RESUME_RUN = {
   listen: d => StageListen(d), pairs: d => StagePairs(d), mirror: d => MirrorChallenge(d.earned, d),
   build: d => StageBuild(d), missing: d => StageMissing(d), 'write-letters': d => WriteLetters(d), 'write-words': d => WriteWords(d),
-  read: d => StageRead(d), talk: d => StageTalk(d),
+  read: d => StageRead(d), talk: d => StageTalk(d), link: d => StageLink(d), sentence: d => StageSentence(d),
 };
 function goalBar() {
   const min = Math.floor(todaySec() / 60), goal = state.goal;
@@ -3022,7 +3027,322 @@ function StageTalk(res) {
         h('p', { class: 'situation' }, heOf(item.he)), line, chips, msg];
       setTimeout(say, 350);
     }
-    app.append(progressDots(ROUNDS, round), ...body, card, nextBtn);
+    app.append(progressDots(ROUNDS, round), ...body.filter(Boolean), card, nextBtn);
+    enter($('.opts', app) || $('.chips', app));
+  }
+  play();
+}
+
+/* =========================================================
+   Stage 8: מילים מחברות (the small words every sentence needs)
+   Hebrew has no "am / is / are" in the present ("אני שמח"), so Hebrew speakers tend to say "I happy".
+   These words can't be sounded out either, so they are learned by ear and by sight.
+   he can be [boy, girl] when the child is the speaker.
+   ========================================================= */
+const LINKS = {
+  I: { he: 'אני', ex: 'I am happy.' },
+  you: { he: 'אתה / את', ex: 'You are my friend.' },
+  he: { he: 'הוא', ex: 'He is my brother.' },
+  she: { he: 'היא', ex: 'She is my sister.' },
+  it: { he: 'זה (דבר או חיה)', ex: 'It is a cat.' },
+  we: { he: 'אנחנו', ex: 'We are friends.' },
+  my: { he: 'שלי', ex: 'This is my bag.' },
+  this: { he: 'זה / זאת (מה שקרוב אלינו)', ex: 'This is my dog.' },
+  the: { he: 'ה־ (כמו בהכלב)', ex: 'Where is the cat?' },
+  have: { he: 'יש לי (אחרי I)', ex: 'I have a dog.' },
+  like: { he: ['אוהב', 'אוהבת'], ex: 'I like pizza.' },
+  can: { he: ['יכול', 'יכולה'], ex: 'I can swim.' },
+  want: { he: 'רוצה', ex: 'I want water.' },
+  where: { he: 'איפה', ex: 'Where is my bag?' },
+};
+const BE = ['am', 'is', 'are'];
+// "I ___ happy": which word joins the sentence. he = what the whole sentence means.
+const BE_ITEMS = [
+  { s: 'I', b: 'am', r: 'happy.', he: ['אני שמח.', 'אני שמחה.'], e: '😄' },
+  { s: 'I', b: 'am', r: 'nine.', he: ['אני בן תשע.', 'אני בת תשע.'], e: '9️⃣' },
+  { s: 'You', b: 'are', r: 'my friend.', he: 'אתה החבר שלי. (או: את החברה שלי.)', e: '🤝' },
+  { s: 'We', b: 'are', r: 'friends.', he: 'אנחנו חברים.', e: '👫' },
+  { s: 'It', b: 'is', r: 'a cat.', he: 'זה חתול.', e: '🐱' },
+  { s: 'It', b: 'is', r: 'big.', he: 'זה גדול.', e: '🐘' },
+  { s: 'He', b: 'is', r: 'my brother.', he: 'הוא אח שלי.', e: '👦' },
+  { s: 'She', b: 'is', r: 'my sister.', he: 'היא אחות שלי.', e: '👧' },
+];
+const BE_TIP = { am: 'אחרי I תמיד באה המילה am.', is: 'אחרי he, ‏she ו־it באה המילה is.', are: 'אחרי you ו־we באה המילה are.' };
+// "___ apple": a, or an before a vowel sound
+const AAN_ITEMS = [['apple', '🍎'], ['egg', '🥚'], ['ant', '🐜'], ['owl', '🦉'], ['orange', '🍊'], ['umbrella', '☂️'], ['cat', '🐱'], ['dog', '🐶'], ['ball', '⚽'], ['bus', '🚌'], ['fish', '🐟'], ['hat', '👒']];
+const anOf = w => /^[aeiou]/.test(w) ? 'an' : 'a';
+// Hebrew text with English words inside: each English run gets its own left-to-right island, so the order stays right
+const bi = t => String(t).split(/([A-Za-z]+(?:['’ ][A-Za-z]+)*)/).filter(Boolean).map((p, i) => /^[A-Za-z]/.test(p) ? en(p) : p);
+const LINK_SETS = { 1: ['I', 'am', 'it', 'is', 'a', 'an'], 2: ['my', 'this', 'have', 'like', 'the'], 3: ['you', 'are', 'he', 'she', 'we', 'can', 'want', 'where'] };
+
+function StageLink(res) {
+  let list, round = 0, earned = 0;
+  if (res && res.list) { list = res.list; round = res.round || 0; earned = res.earned || 0; }
+  else {
+    const set = (Run && Run.links) || LINK_SETS[state.level] || LINK_SETS[1];
+    const mean = set.filter(w => LINKS[w]).map(w => ({ t: 'mean', w }));
+    const beWords = set.filter(w => BE.includes(w));
+    const be = beWords.length ? [...new Set([...shuffle(BE_ITEMS.filter(x => beWords.includes(x.b))), ...shuffle(BE_ITEMS)])].slice(0, 3).map(x => ({ t: 'be', i: BE_ITEMS.indexOf(x) })) : [];
+    const aan = set.some(w => w === 'a' || w === 'an') ? shuffle(AAN_ITEMS).slice(0, 2).map(x => ({ t: 'aan', i: AAN_ITEMS.indexOf(x) })) : [];
+    // the meaning of each word first, then using them
+    list = [...shuffle(mean).slice(0, 4), ...shuffle([...be, ...aan])].slice(0, (Run && Run.rounds) || 8);
+  }
+  const ROUNDS = list.length;
+  const saveAt = r => Resume.save('link', { list, round: r, earned });
+  const ear = (text, cls = 'ear') => h('button', { class: cls, type: 'button', 'aria-label': 'השמע', onclick: e => { e.stopPropagation(); Speech.en(text, .8); } }, '🔊');
+
+  function play() {
+    saveAt(round);
+    const app = screen('מילים מחברות');
+    const it = list[round];
+    let solved = false, firstTry = true; Guard.start();
+    const msg = h('p', { class: 'sub' }), card = h('div');
+    const nextBtn = nextButton(round === ROUNDS - 1, () => { round++; if (round >= ROUNDS) EndScreen('link', earned, () => StageLink()); else play(); });
+    let key, model, body;
+    const win = (el, extra) => {
+      solved = true; if (el) { el.classList.add('right'); pop(el); burst(el); }
+      earned += Guard.star('link');
+      Mastery.rec(key, firstTry);
+      msg.textContent = 'נכון! 🎉';
+      const c = h('div', { class: 'hint blue say-card' }, h('span', { class: 'big-en en' }, model), ear(model, 'mini-ear'), ...extra, speakBox(model));
+      card.append(c); enter(c); nextBtn.classList.remove('hidden');
+      Speech.en(model, .8);
+      saveAt(round + 1 < ROUNDS ? round + 1 : round);
+      setTimeout(() => nextBtn.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
+    };
+    const miss = (el, text) => { firstTry = false; Guard.miss(); if (el) { el.classList.add('wrong'); shake(el); } msg.replaceChildren(...bi(text)); };
+    const optBtns = (opts, right, onWrong, isEn) => h('div', { class: 'opts' + (isEn ? ' row-opts' : '') }, opts.map(o => h('button', { class: 'opt' + (isEn ? ' en' : ''), type: 'button', onclick: e => {
+      if (solved) return; if (o === right) win(e.currentTarget, it.t === 'mean' ? [h('p', null, h('b', null, en(it.w), ' = ', heOf(LINKS[it.w].he)))] : it.t === 'be' ? [h('p', null, heOf(BE_ITEMS[it.i].he)), h('p', null, '💡 ', ...bi(BE_TIP[right]))] : [h('p', null, '💡 ', ...bi('לפני מילה שמתחילה ב־a, e, i, o, u אומרים an.'))]); else onWrong(e.currentTarget, o);
+    } }, o)));
+
+    if (it.t === 'mean') {
+      const w = it.w, L = LINKS[w]; key = 'K:' + w; model = L.ex;
+      const others = shuffle(Object.keys(LINKS).filter(x => x !== w && heOf(LINKS[x].he) !== heOf(L.he))).slice(0, 2);
+      const opts = shuffle([w, ...others]);
+      const say = () => Speech.en(w, .7);
+      msg.textContent = g('לחץ', 'לחצי') + ' על המילה כדי לשמוע אותה.';
+      body = [h('div', { class: 'prompt' }, 'מה המילה הזו אומרת?'),
+        h('button', { class: 'pic link-word', type: 'button', onclick: say }, h('span', { class: 'en big-word' }, w), h('span', { class: 'say' }, '🔊 להקשיב')), msg,
+        h('div', { class: 'opts' }, opts.map(o => h('button', { class: 'opt', type: 'button', onclick: e => {
+          if (solved) return;
+          if (o === w) win(e.currentTarget, [h('p', null, h('b', null, en(w), ' = ', heOf(L.he)))]);
+          else miss(e.currentTarget, `לא בדיוק: ${o} זה "${heOf(LINKS[o].he)}". ` + g('נסה', 'נסי') + ' שוב 🙂');
+        } }, heOf(LINKS[o].he))))];
+      setTimeout(say, 350);
+    } else if (it.t === 'be') {
+      const x = BE_ITEMS[it.i]; key = 'K:' + x.b; model = `${x.s} ${x.b} ${x.r}`;
+      msg.textContent = g('בחר', 'בחרי') + ' את המילה שמחברת את המשפט.';
+      body = [h('div', { class: 'prompt' }, 'איזו מילה חסרה?'), h('div', { class: 'pic still' }, h('span', { class: 'emoji' }, x.e)),
+        h('p', { class: 'situation' }, heOf(x.he)),
+        h('div', { class: 'gap-line en' }, x.s, ' ', h('span', { class: 'gap' }, '___'), ' ', x.r), msg,
+        optBtns(BE, x.b, (el, o) => miss(el, `לא ${o}. ` + BE_TIP[x.b] + ' ' + g('נסה', 'נסי') + ' שוב 🙂'), true)];
+    } else {
+      const [w, e] = AAN_ITEMS[it.i], right = anOf(w); key = 'K:aan'; model = `${right} ${w}`;
+      msg.replaceChildren(...bi('a או an? ' + g('הקשב', 'הקשיבי') + ' לצליל הראשון של המילה.'));
+      body = [h('div', { class: 'prompt' }, 'מה בא לפני המילה?'), h('button', { class: 'pic', type: 'button', onclick: () => Speech.en(w, .8) }, h('span', { class: 'emoji' }, e), h('span', { class: 'say' }, '🔊 ' + w)),
+        h('div', { class: 'gap-line en' }, h('span', { class: 'gap' }, '___'), ' ', w), msg,
+        optBtns(['a', 'an'], right, el => miss(el, right === 'an' ? `${w} מתחילה בתנועה (${w[0]}), אז אומרים an.` : `${w} מתחילה ב־${w[0]}, שזו לא תנועה, אז אומרים a.`), true)];
+    }
+    app.append(progressDots(ROUNDS, round), ...body.filter(Boolean), card, nextBtn);
+    enter($('.opts', app));
+  }
+  play();
+}
+
+/* =========================================================
+   Stage 9: בונים משפט (sentence frames)
+   Children get to conversation through fixed frames ("I am ___", "I like ___") filled with words they know.
+   Rounds: hear it and pick the meaning, build it from word chips, and fill the missing word.
+   en / he / e can be [boy, girl] when the child is the speaker. k = the word the gap round hides.
+   gap: 'be' hides am/is/are, 'article' hides a/an, otherwise the main word.
+   ========================================================= */
+const FRAMES = {
+  iam: { L: 1, f: 'I am …', gap: 'be', items: [
+    { en: 'I am happy.', he: ['אני שמח.', 'אני שמחה.'], e: '😄' },
+    { en: 'I am sad.', he: ['אני עצוב.', 'אני עצובה.'], e: '😢' },
+    { en: 'I am hungry.', he: ['אני רעב.', 'אני רעבה.'], e: '🍽️' },
+    { en: 'I am tired.', he: ['אני עייף.', 'אני עייפה.'], e: '🥱' },
+    { en: 'I am nine.', he: ['אני בן תשע.', 'אני בת תשע.'], e: '9️⃣' },
+    { en: ['I am a boy.', 'I am a girl.'], he: ['אני ילד.', 'אני ילדה.'], e: ['👦', '👧'] },
+    { en: 'I am hot.', he: 'חם לי.', e: '🥵' },
+  ] },
+  itis: { L: 1, f: 'It is a …', gap: 'article', items: [
+    { en: 'It is a cat.', he: 'זה חתול.', e: '🐱' },
+    { en: 'It is a dog.', he: 'זה כלב.', e: '🐶' },
+    { en: 'It is a ball.', he: 'זה כדור.', e: '⚽' },
+    { en: 'It is a fish.', he: 'זה דג.', e: '🐟' },
+    { en: 'It is an apple.', he: 'זה תפוח.', e: '🍎' },
+    { en: 'It is an egg.', he: 'זאת ביצה.', e: '🥚' },
+    { en: 'It is big.', he: 'זה גדול.', e: '🐘' },
+    { en: 'It is hot.', he: 'חם.', e: '☀️' },
+  ] },
+  ihave: { L: 2, f: 'I have …', items: [
+    { en: 'I have a dog.', he: 'יש לי כלב.', e: '🐶' },
+    { en: 'I have a cat.', he: 'יש לי חתול.', e: '🐱' },
+    { en: 'I have a red ball.', he: 'יש לי כדור אדום.', e: '🔴' },
+    { en: 'I have a bike.', he: 'יש לי אופניים.', e: '🚲' },
+    { en: 'I have an egg.', he: 'יש לי ביצה.', e: '🥚' },
+    { en: 'I have two hands.', he: 'יש לי שתי ידיים.', e: '🙌' },
+  ] },
+  ilike: { L: 2, f: 'I like …', items: [
+    { en: 'I like pizza.', he: ['אני אוהב פיצה.', 'אני אוהבת פיצה.'], e: '🍕' },
+    { en: 'I like ice cream.', he: ['אני אוהב גלידה.', 'אני אוהבת גלידה.'], e: '🍦', k: 'ice cream' },
+    { en: 'I like cats.', he: ['אני אוהב חתולים.', 'אני אוהבת חתולים.'], e: '🐈' },
+    { en: 'I like dogs.', he: ['אני אוהב כלבים.', 'אני אוהבת כלבים.'], e: '🐕' },
+    { en: 'I like milk.', he: ['אני אוהב חלב.', 'אני אוהבת חלב.'], e: '🥛' },
+    { en: 'I like to swim.', he: ['אני אוהב לשחות.', 'אני אוהבת לשחות.'], e: '🏊' },
+  ] },
+  thisis: { L: 2, f: 'This is my …', items: [
+    { en: 'This is my mom.', he: 'זאת אמא שלי.', e: '👩' },
+    { en: 'This is my dad.', he: 'זה אבא שלי.', e: '👨' },
+    { en: 'This is my bag.', he: 'זה התיק שלי.', e: '🎒' },
+    { en: 'This is my room.', he: 'זה החדר שלי.', e: '🛏️' },
+    { en: 'This is my book.', he: 'זה הספר שלי.', e: '📕' },
+    { en: 'This is my cat.', he: 'זה החתול שלי.', e: '🐈' },
+  ] },
+  heshe: { L: 3, f: 'He is / She is …', gap: 'be', items: [
+    { en: 'He is my brother.', he: 'הוא אח שלי.', e: '👦' },
+    { en: 'She is my sister.', he: 'היא אחות שלי.', e: '👧' },
+    { en: 'He is tall.', he: 'הוא גבוה.', e: '🦒' },
+    { en: 'She is happy.', he: 'היא שמחה.', e: '😊' },
+    { en: 'You are my friend.', he: 'אתה החבר שלי. (או: את החברה שלי.)', e: '🤝' },
+    { en: 'We are friends.', he: 'אנחנו חברים.', e: '👫' },
+  ] },
+  ican: { L: 3, f: 'I can …', items: [
+    { en: 'I can run.', he: ['אני יכול לרוץ.', 'אני יכולה לרוץ.'], e: '🏃' },
+    { en: 'I can jump.', he: ['אני יכול לקפוץ.', 'אני יכולה לקפוץ.'], e: '🤸' },
+    { en: 'I can swim.', he: ['אני יכול לשחות.', 'אני יכולה לשחות.'], e: '🏊' },
+    { en: 'I can sing.', he: ['אני יכול לשיר.', 'אני יכולה לשיר.'], e: '🎤' },
+    { en: 'I can read.', he: ['אני יכול לקרוא.', 'אני יכולה לקרוא.'], e: '📖' },
+    { en: 'I can ride a bike.', he: ['אני יכול לרכוב על אופניים.', 'אני יכולה לרכוב על אופניים.'], e: '🚴', k: 'ride' },
+  ] },
+  iwant: { L: 3, f: 'I want …', items: [
+    { en: 'I want water.', he: 'אני רוצה מים.', e: '💧' },
+    { en: 'I want to play.', he: 'אני רוצה לשחק.', e: '🎲' },
+    { en: 'I want a cookie.', he: 'אני רוצה עוגייה.', e: '🍪' },
+    { en: 'I want to go home.', he: 'אני רוצה ללכת הביתה.', e: '🏠' },
+    { en: 'I want to sleep.', he: 'אני רוצה לישון.', e: '😴' },
+  ] },
+  canihave: { L: 3, f: 'Can I have …, please?', items: [
+    { en: 'Can I have water, please?', he: 'אפשר לקבל מים, בבקשה?', e: '💧' },
+    { en: 'Can I have a ball, please?', he: 'אפשר לקבל כדור, בבקשה?', e: '⚽' },
+    { en: 'Can I have an apple, please?', he: 'אפשר לקבל תפוח, בבקשה?', e: '🍎' },
+    { en: 'Can I have some juice, please?', he: 'אפשר לקבל קצת מיץ, בבקשה?', e: '🧃' },
+    { en: 'Can I have a pencil, please?', he: 'אפשר לקבל עיפרון, בבקשה?', e: '✏️' },
+  ] },
+  whereis: { L: 3, f: 'Where is …?', items: [
+    { en: 'Where is my bag?', he: 'איפה התיק שלי?', e: '🎒' },
+    { en: 'Where is the cat?', he: 'איפה החתול?', e: '🐱' },
+    { en: 'Where is mom?', he: 'איפה אמא?', e: '👩' },
+    { en: 'Where is the ball?', he: 'איפה הכדור?', e: '⚽' },
+    { en: 'Where is my shoe?', he: 'איפה הנעל שלי?', e: '👟' },
+  ] },
+};
+const gv = x => Array.isArray(x) ? g(x[0], x[1]) : x;   // boy/girl version of a sentence or a picture
+const sText = x => gv(x.en);
+const sWords = t => t.replace(/[.,!?]/g, '').split(' ');
+// the word a gap round hides, and what the child picks from
+function gapOf(x, fk, pool) {
+  const t = sText(x), words = sWords(t), mode = FRAMES[fk].gap;
+  if (mode === 'be') { const b = words.find(w => BE.includes(w)); if (b) return { k: b, opts: BE, tip: BE_TIP[b] }; }
+  if (mode === 'article') { const a = words.find(w => w === 'a' || w === 'an'); if (a) return { k: a, opts: ['a', 'an'], tip: 'לפני מילה שמתחילה ב־a, e, i, o, u אומרים an.' }; }
+  const keyOf = y => y.k || [...sWords(sText(y))].reverse().find(w => !SMALL_WORDS.has(w.toLowerCase()) && w !== 'please');
+  const k = keyOf(x);
+  const others = [...new Set(shuffle(pool.filter(y => y !== x)).map(keyOf))].filter(o => o && o !== k).slice(0, 2);
+  return { k, opts: shuffle([k, ...others]) };
+}
+// "I happy" is what Hebrew speakers say: show how English needs the joining word
+const beHint = t => { const w = sWords(t), i = w.findIndex(x => BE.includes(x)); return i > 0 ? `באנגלית לא אומרים ${[...w.slice(0, i), ...w.slice(i + 1)].join(' ')} אלא ${w.join(' ')}. ${BE_TIP[w[i]]}` : null; };
+const ALL_SENT = () => Object.entries(FRAMES).flatMap(([fk, F]) => F.items.map(x => ({ ...x, fk })));
+
+function StageSentence(res) {
+  const keys = (Run && Run.frames) || Object.keys(FRAMES).filter(k => FRAMES[k].L <= state.level);
+  const pool = ALL_SENT().filter(x => keys.includes(x.fk));
+  let list, kinds, round = 0, earned = 0;
+  if (res && res.list) { list = res.list.map(t => ALL_SENT().find(x => sText(x) === t)).filter(Boolean); kinds = res.kinds; round = res.round || 0; earned = res.earned || 0; }
+  else {
+    const weak = shuffle(pool.filter(x => Mastery.isWeak('S:' + sText(x)))).slice(0, 2);
+    list = [...weak, ...shuffle(pool.filter(x => !weak.includes(x)))].slice(0, (Run && Run.rounds) || 6);
+    kinds = list.map((x, i) => ['meaning', 'build', 'gap'][i % 3]);
+  }
+  const ROUNDS = list.length;
+  const saveAt = r => Resume.save('sentence', { list: list.map(sText), kinds, round: r, earned });
+  const ear = (text, cls = 'ear') => h('button', { class: cls, type: 'button', 'aria-label': 'השמע', onclick: e => { e.stopPropagation(); Speech.en(text, .8); } }, '🔊');
+
+  function play() {
+    saveAt(round);
+    const app = screen('בונים משפט');
+    const item = list[round], kind = kinds[round], text = sText(item), say = () => Speech.en(text, .8);
+    let solved = false, firstTry = true, onWin = null; Guard.start();
+    const msg = h('p', { class: 'sub' }), card = h('div');
+    const nextBtn = nextButton(round === ROUNDS - 1, () => { round++; if (round >= ROUNDS) EndScreen('sentence', earned, () => StageSentence()); else play(); });
+    function win(el) {
+      solved = true; if (el) { el.classList.add('right'); pop(el); burst(el); }
+      if (onWin) onWin();
+      earned += Guard.star('sentence');
+      Mastery.rec('S:' + text, firstTry);
+      msg.textContent = 'נכון! 🎉';
+      const hint = beHint(text);
+      const c = h('div', { class: 'hint blue say-card' }, h('span', { class: 'big-en en' }, text), ear(text, 'mini-ear'),
+        h('p', null, h('b', null, heOf(item.he))), hint ? h('p', null, '💡 ', ...bi(hint)) : null, speakBox(text));
+      card.append(c); enter(c); nextBtn.classList.remove('hidden');
+      say();
+      saveAt(round + 1 < ROUNDS ? round + 1 : round);
+      setTimeout(() => nextBtn.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
+    }
+    function miss(el, t) { firstTry = false; Guard.miss(); if (el) { el.classList.add('wrong'); shake(el); } msg.replaceChildren(...bi(t)); }
+
+    let body;
+    if (kind === 'meaning') {
+      const others = [];
+      for (const y of shuffle(pool.filter(y => y !== item))) { if (others.length === 2) break; if (heOf(y.he) !== heOf(item.he) && !others.some(o => heOf(o.he) === heOf(y.he))) others.push(y); }
+      const opts = shuffle([item, ...others]);
+      const pic = speakerPic('👂', say);
+      onWin = () => { $('.emoji', pic).textContent = gv(item.e); pop(pic); };
+      msg.textContent = g('לחץ', 'לחצי') + ' על התמונה כדי לשמוע שוב';
+      body = [h('div', { class: 'prompt' }, 'מה אמרו באנגלית?'), pic, msg,
+        h('div', { class: 'opts' }, opts.map(o => h('button', { class: 'opt', type: 'button', onclick: e => {
+          if (solved) return;
+          if (o === item) win(e.currentTarget); else { miss(e.currentTarget, 'כמעט! ' + g('הקשב', 'הקשיבי') + ' לכל מילה ' + g('ונסה', 'ונסי') + ' שוב 🙂'); say(); }
+        } }, heOf(o.he))))];
+      setTimeout(say, 350);
+    } else if (kind === 'build') {
+      const words = sWords(text);
+      // one extra word that does not belong, so the joining word has to be chosen, not just placed
+      const be = words.find(w => BE.includes(w)), art = words.find(w => w === 'a' || w === 'an');
+      const extra = be ? pick(BE.filter(x => x !== be)) : art ? (art === 'a' ? 'an' : 'a') : null;
+      let k = 0;
+      msg.textContent = g('לחץ', 'לחצי') + ' על המילים לפי הסדר, משמאל לימין.';
+      const line = h('div', { class: 'phrase-line' });
+      const chips = h('div', { class: 'chips' }, shuffle([...words.map(w => ({ w })), ...(extra ? [{ w: extra, x: true }] : [])]).map(({ w }) => {
+        const b = h('button', { class: 'chip en', type: 'button' }, w);
+        b.addEventListener('click', () => {
+          if (solved) return;
+          if (w !== words[k]) { miss(b, (BE.includes(w) && BE.includes(words[k])) ? 'לא המילה הזו. ' + BE_TIP[words[k]] : 'לא המילה הזו. ' + g('הקשב', 'הקשיבי') + ' שוב 🙂'); b.classList.remove('wrong'); say(); return; }
+          b.classList.add('used');
+          const placed = h('span', { class: 'chip en placed' }, w); line.append(placed); pop(placed);
+          k++;
+          if (k === words.length) { chips.style.display = 'none'; win(null); }
+        });
+        return b;
+      }));
+      body = [h('div', { class: 'prompt' }, g('בנה', 'בני') + ' את המשפט באנגלית'), speakerPic(gv(item.e), say),
+        h('p', { class: 'situation' }, heOf(item.he)), line, chips, msg];
+      setTimeout(say, 350);
+    } else {
+      const gp = gapOf(item, item.fk, pool);
+      const words = sWords(text), kw = gp.k.split(' '), at = words.findIndex((w, i) => kw.every((x, j) => words[i + j] === x));
+      const before = words.slice(0, at).join(' '), rest = words.slice(at + kw.length).join(' '), after = (rest ? ' ' + rest : '') + (text.match(/[.!?]$/) || [''])[0];
+      msg.textContent = g('בחר', 'בחרי') + ' את המילה שחסרה.';
+      body = [h('div', { class: 'prompt' }, 'איזו מילה חסרה?'), h('div', { class: 'pic still' }, h('span', { class: 'emoji' }, gv(item.e))),
+        gp.tip ? h('p', { class: 'situation' }, heOf(item.he)) : null,
+        h('div', { class: 'gap-line en' }, before, before ? ' ' : '', h('span', { class: 'gap' }, '___'), after), msg,
+        h('div', { class: 'opts row-opts' }, gp.opts.map(o => h('button', { class: 'opt en', type: 'button', onclick: e => {
+          if (solved) return;
+          if (o === gp.k) win(e.currentTarget); else miss(e.currentTarget, `לא ${o}. ` + (gp.tip || g('הסתכל', 'הסתכלי') + ' על התמונה ' + g('ונסה', 'ונסי') + ' שוב 🙂'));
+        } }, o)))];
+    }
+    app.append(progressDots(ROUNDS, round), ...body.filter(Boolean), card, nextBtn);
     enter($('.opts', app) || $('.chips', app));
   }
   play();
@@ -3039,6 +3359,8 @@ STAGES.push(
   { key: 'write',   icon: '✏️', name: 'כותבים',     desc: 'כותבים אותיות ומילים באצבע', run: () => StageWrite() },
   { key: 'read',    icon: '📖', name: 'קוראים מילה', desc: 'מחברים צלילים וקוראים מילה שלמה', run: () => StageRead() },
   { key: 'talk',    icon: '💬', name: 'מדברים',     desc: 'ביטויים של כל יום, ומתי אומרים אותם', run: () => StageTalk() },
+  { key: 'link',    icon: '🔗', name: 'מילים מחברות', desc: 'I, you, am, is, are, a, an: המילים שכל משפט צריך', run: () => StageLink() },
+  { key: 'sentence', icon: '🗣️', name: 'בונים משפט', desc: 'משפטים כמו I am, I like, I can, ואומרים אותם בקול', run: () => StageSentence() },
 );
 
 /* =========================================================
@@ -3060,9 +3382,12 @@ const KIND = {
   wwrite: { icon: '📝', name: 'כותבים מילה', run: () => WriteWords() },
   mirror: { icon: '🪞', name: 'אותיות מראה', run: () => MirrorChallenge(0) },
   talk: { icon: '💬', name: 'מדברים', run: () => StageTalk() },
+  link: { icon: '🔗', name: 'מילים מחברות', run: () => StageLink() },
+  frame: { icon: '🗣️', name: 'בונים משפט', run: () => StageSentence() },
   chest: { icon: '🎁', name: 'תיבת הפתעה' },
 };
-const PHASES = { 1: 'אותיות, מילים וכתיבה', 2: 'מילים ומבחן כתיבה', 3: 'משפטים', 4: 'תרגול בלי סוף' };
+const PHASES = { 1: 'אותיות, מילים וכתיבה', 2: 'מילים ומבחן כתיבה', 3: 'ביטויים של כל יום', 4: 'בונים משפטים', 5: 'שיחות', 6: 'תרגול בלי סוף' };
+const ENDLESS_PHASE = 6;
 const ALL_ABC = MAP_GROUPS.join('').split('');
 // easy at the start, harder as the child knows more: more answers to choose from, more points needed
 const zoneOf = gi => gi < 2 ? { opts: 3, pct: .6 } : gi < 8 ? { opts: 4, pct: .75 } : { opts: 5, pct: .85 };
@@ -3107,16 +3432,29 @@ const MAP = (() => {
     add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk', pct: .9, quiz: true });
     add({ ...base, kind: 'chest' });
   });
+  // map v2: building sentences. First the joining words a block needs, then one station per frame, a quiz and a chest.
+  [
+    { key: 's1', level: 1, links: LINK_SETS[1], frames: ['iam', 'itis'] },
+    { key: 's2', level: 2, links: LINK_SETS[2], frames: ['ihave', 'ilike', 'thisis'] },
+    { key: 's3', level: 3, links: ['you', 'are', 'he', 'she', 'we', 'can'], frames: ['heshe', 'ican'] },
+    { key: 's4', level: 3, links: ['want', 'where', 'the', 'my'], frames: ['iwant', 'canihave', 'whereis'] },
+  ].forEach(bk => {
+    const base = { phase: 4, v: 2, letters: [], known: ALL_ABC, level: bk.level, opts: 3, pct: .75, tag: 'משפטים', key: bk.key };
+    add({ ...base, kind: 'link', links: bk.links, title: 'מילים מחברות: ' + bk.links.join(' ') });
+    bk.frames.forEach(fk => add({ ...base, kind: 'frame', frames: [fk], key: bk.key + '-' + fk, title: 'בונים משפט: ' + FRAMES[fk].f }));
+    add({ ...base, kind: 'frame', frames: bk.frames, quiz: true, pct: .85, rounds: 8, title: '🏁 בוחן משפטים' });
+    add({ ...base, kind: 'chest' });
+  });
   return out;
 })();
-const ENDLESS = ['listen', 'build', 'read', 'missing', 'talk', 'wwrite', 'listen', 'build', 'talk'];
+const ENDLESS = ['listen', 'build', 'frame', 'read', 'missing', 'talk', 'wwrite', 'frame', 'listen', 'build', 'talk', 'frame'];
 function stationAt(i) {
   if (i < MAP.length) return MAP[i];
   const k = i - MAP.length, step = Math.floor(k / 10);
-  const base = { i, id: 'e:' + k, phase: 4, letters: [], known: ALL_ABC, level: 1 + (k % 3), opts: 6, pct: Math.min(.95, .85 + .01 * step), rounds: 8, dyn: true, tag: 'בלי סוף' };
+  const base = { i, id: 'e:' + k, phase: ENDLESS_PHASE, letters: [], known: ALL_ABC, level: 1 + (k % 3), opts: 6, pct: Math.min(.95, .85 + .01 * step), rounds: 8, dyn: true, tag: 'בלי סוף' };
   if (k % 10 === 9) return { ...base, kind: 'chest' };
   const kind = ENDLESS[(k - step) % ENDLESS.length];
-  return { ...base, kind, rounds: kind === 'wwrite' ? 3 : kind === 'read' || kind === 'talk' ? 6 : 8 };
+  return { ...base, kind, rounds: kind === 'wwrite' ? 3 : kind === 'read' || kind === 'talk' || kind === 'frame' ? 6 : 8 };
 }
 const stationTitle = s => s.title || (s.quiz ? `🏁 בוחן: ${KIND[s.kind].name}` : KIND[s.kind].name);
 
