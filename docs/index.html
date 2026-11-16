@@ -301,6 +301,12 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .say-card{text-align:center}
 .say-card .big-en{font-size:28px;display:block;margin-bottom:2px}
 .say-card p{margin:6px 0}
+.speak{margin-top:10px;padding-top:10px;border-top:2px dashed rgba(0,0,0,.08)}
+.speak-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.speak-btn{background:var(--orange,#f08a24);box-shadow:0 4px 0 #b9651a}
+.speak-msg{margin:8px 0 0;font-size:15px}
+.check-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:700}
+.check-row input{width:22px;height:22px}
 .mini-ear{border:0;background:#fff;border-radius:10px;padding:2px 8px;margin-inline-start:6px;font-size:18px;box-shadow:0 2px 0 var(--line)}
 </style>
 </head>
@@ -661,11 +667,11 @@ const store = {
   set(k, v) { RAW.set(`p${PID}_${k}`, v); onKidChange(PID); },
   del(k) { RAW.del(`p${PID}_${k}`); onKidChange(PID); },
 };
-const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits'];
+const PROFILE_KEYS = ['stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits', 'spoken'];
 
 const state = {
   stars: 0, stageStars: {}, done: {}, caseMode: 'upper', level: 1,
-  mastery: {}, time: {}, goalDays: [], stickers: [], goal: 10, timerMin: 0, guess: {},
+  mastery: {}, time: {}, goalDays: [], stickers: [], goal: 10, timerMin: 0, guess: {}, spoken: {},
   startedAt: null, breakShown: false,
 };
 
@@ -704,7 +710,7 @@ function loadProfile(id) {
     stars: store.get('stars', 0), stageStars: store.get('stageStars', {}), done: store.get('done', {}),
     caseMode: store.get('case', 'upper'), level: store.get('level', 1),
     mastery: store.get('mastery', {}), time: store.get('time', {}), goalDays: store.get('goalDays', []),
-    stickers: store.get('stickers', []), goal: store.get('goal', 10), timerMin: store.get('timerMin', 0), guess: store.get('guess', {}),
+    stickers: store.get('stickers', []), goal: store.get('goal', 10), timerMin: store.get('timerMin', 0), guess: store.get('guess', {}), spoken: store.get('spoken', {}),
     startedAt: null, breakShown: false,
   });
   PlayTimer.render();
@@ -908,6 +914,126 @@ const Speech = {
   en(text, rate) { return this.say(text, 'en-US', rate); },
 };
 Speech.init();
+
+/* =========================================================
+   Speaking: the child says it out loud.
+   Recording: stays in this phone's memory only, is never saved or sent, and is gone when the screen changes.
+   Automatic checking (speech recognition) is off unless a parent turns it on, because the browser sends
+   the voice to its own servers (in Chrome: Google) to turn it into text.
+   ========================================================= */
+const Mic = {
+  ok: !!(window.isSecureContext !== false && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder),
+  SR: window.SpeechRecognition || window.webkitSpeechRecognition || null,
+  stream: null, rec: null, url: null, sr: null, gen: 0, timer: null,
+  asrOn() { return !!this.SR && RAW.get('asr', false) === true; },
+  async record(maxMs = 6000) {
+    this.release();
+    const gen = this.gen;
+    if (Speech.ok) try { speechSynthesis.cancel(); } catch (e) {}
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (gen !== this.gen) { this.stopStream(); return null; }
+    const chunks = [], rec = this.rec = new MediaRecorder(this.stream);
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const done = new Promise(res => { rec.onstop = res; });
+    rec.start();
+    this.timer = setTimeout(() => this.stop(), maxMs);
+    await done;
+    clearTimeout(this.timer); this.stopStream(); this.rec = null;
+    if (gen !== this.gen || !chunks.length) return null;
+    this.url = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+    return this.url;
+  },
+  recording() { return !!(this.rec && this.rec.state === 'recording'); },
+  stop() { if (this.recording()) this.rec.stop(); },
+  stopStream() { if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; } },
+  // speech recognition: resolves with what the browser heard (a few guesses), or [] and Mic.err
+  hear(maxMs = 7000) {
+    this.release();
+    return new Promise(res => {
+      this.err = null;
+      let alts = [], r;
+      try { r = this.sr = new this.SR(); } catch (e) { this.err = 'start'; return res([]); }
+      r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 4;
+      r.onresult = e => { alts = [...e.results[0]].map(a => a.transcript); };
+      r.onerror = e => { this.err = e.error; };
+      r.onend = () => { clearTimeout(t); if (this.sr === r) this.sr = null; res(alts); };
+      const t = setTimeout(() => { try { r.stop(); } catch (e) {} }, maxMs);
+      try { r.start(); } catch (e) { this.err = 'start'; clearTimeout(t); res([]); }
+    });
+  },
+  release() {
+    this.gen++;
+    clearTimeout(this.timer);
+    if (this.recording()) try { this.rec.stop(); } catch (e) {}
+    this.rec = null; this.stopStream();
+    if (this.url) { URL.revokeObjectURL(this.url); this.url = null; }
+    if (this.sr) { try { this.sr.abort(); } catch (e) {} this.sr = null; }
+  },
+};
+// how close the heard words are to the sentence (lenient: children's accents are hard for recognisers)
+const EN_SHORT = [[/\bi'm\b/g, 'i am'], [/\bit's\b/g, 'it is'], [/\byou're\b/g, 'you are'], [/\bdon't\b/g, 'do not'], [/\blet's\b/g, 'let us'], [/\bwhat's\b/g, 'what is'], [/\bhe's\b/g, 'he is'], [/\bshe's\b/g, 'she is'], [/\bthat's\b/g, 'that is']];
+function enWords(t) {
+  let x = String(t).toLowerCase().replace(/[’‘]/g, "'");
+  for (const [re, to] of EN_SHORT) x = x.replace(re, to);
+  return x.replace(/[^a-z' ]/g, ' ').split(/\s+/).filter(Boolean);
+}
+// the main words (cat, happy, water) must be heard; small words (a, is, the) only count toward the total
+const SMALL_WORDS = new Set(['i', 'am', 'is', 'are', 'a', 'an', 'the', 'it', 'you', 'my', 'to', 'do', 'not', 'us', 'please', 'he', 'she', 'we', 'this', 'that', 'what', 'can', 'have', 'has']);
+function sayScore(target, heard) {
+  const T = enWords(target); if (!T.length) return 0;
+  const main = T.filter(w => !SMALL_WORDS.has(w));
+  return Math.max(0, ...heard.map(hd => {
+    const H = new Set(enWords(hd)), all = T.filter(w => H.has(w)).length / T.length;
+    return main.length && main.some(w => !H.has(w)) ? Math.min(all, .5) : all;
+  }));
+}
+function markSpoken() {
+  const k = dayKey(); state.spoken[k] = (state.spoken[k] || 0) + 1;
+  const keys = Object.keys(state.spoken).sort(); while (keys.length > 90) delete state.spoken[keys.shift()];
+  store.set('spoken', state.spoken);
+}
+// "now you say it": record and hear yourself next to the game's voice, or (if the parent allowed it) a lenient check
+function speakBox(text) {
+  const asr = Mic.asrOn();
+  if (!Mic.ok && !asr) return null;
+  const msg = h('p', { class: 'speak-msg' }, asr ? g('לחץ על 🎤 ותגיד את המשפט באנגלית.', 'לחצי על 🎤 ותגידי את המשפט באנגלית.') : g('לחץ על 🎤, תגיד את המשפט, ואז תשמע את עצמך ליד המשחק.', 'לחצי על 🎤, תגידי את המשפט, ואז תשמעי את עצמך ליד המשחק.'));
+  const mine = h('button', { class: 'btn small secondary hidden', type: 'button' }, '▶️ אני');
+  const model = h('button', { class: 'btn small secondary', type: 'button', onclick: () => Speech.en(text, .8) }, '🔊 המשחק');
+  const mic = h('button', { class: 'btn small speak-btn', type: 'button' }, '🎤 ' + g('עכשיו אתה', 'עכשיו את'));
+  const playMine = () => { if (Mic.url) { const a = new Audio(Mic.url); a.play().catch(() => {}); } };
+  mine.addEventListener('click', playMine);
+  const micErr = e => toast(e === 'not-allowed' || e === 'NotAllowedError' || e === 'service-not-allowed'
+    ? '🎤 אין הרשאה למיקרופון. אפשר לאשר אותה בהגדרות הדפדפן, ליד כתובת האתר.'
+    : e === 'network' ? '🎤 בדיקת ההגייה צריכה אינטרנט. אפשר לנסות שוב כשיש חיבור.' : '🎤 לא הצלחתי לשמוע. ננסה שוב?', 4200);
+  mic.addEventListener('click', async () => {
+    if (Mic.recording()) return Mic.stop();
+    if (asr) {
+      mic.disabled = true; mic.textContent = '👂 מקשיב...';
+      const heard = await Mic.hear();
+      mic.disabled = false; mic.textContent = '🎤 עוד פעם';
+      if (!heard.length) { if (Mic.err && Mic.err !== 'no-speech' && Mic.err !== 'aborted') micErr(Mic.err); else msg.textContent = 'לא שמעתי כלום. ' + g('נסה', 'נסי') + ' לדבר קרוב יותר לטלפון 🙂'; return; }
+      markSpoken();
+      const sc = sayScore(text, heard);
+      msg.innerHTML = '';
+      msg.append(sc >= .6 ? '👏 מצוין! שמעתי: ' : 'שמעתי: ', en(heard[0]), sc >= .6 ? '' : '. ' + g('נסה', 'נסי') + ' עוד פעם, לאט וברור 🙂');
+      if (sc >= .6) pop(msg);
+      return;
+    }
+    try {
+      mic.textContent = '⏹️ סיימתי';
+      msg.textContent = g('מקליט... תגיד את המשפט', 'מקליטה... תגידי את המשפט');
+      const url = await Mic.record();
+      mic.textContent = '🎤 עוד פעם';
+      if (!url) { msg.textContent = 'לא נקלט כלום. ננסה שוב?'; return; }
+      markSpoken();
+      mine.classList.remove('hidden');
+      msg.textContent = g('עכשיו תקשיב: קודם המשחק, ואחר כך אתה.', 'עכשיו תקשיבי: קודם המשחק, ואחר כך את.');
+      await Speech.en(text, .8);
+      playMine();
+    } catch (e) { mic.textContent = '🎤 עוד פעם'; msg.textContent = ''; micErr(e && e.name); }
+  });
+  return h('div', { class: 'speak' }, h('div', { class: 'speak-row' }, mic, model, mine), msg);
+}
 
 /* =========================================================
    Motion (GSAP; falls back to CSS if missing)
@@ -1128,6 +1254,7 @@ let cleanup = null;
 function screen(title, showBack = true) {
   if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
   if (Speech.ok) try { speechSynthesis.cancel(); } catch (e) {}
+  Mic.release();
   Guard.unthink();
   $('#screenTitle').textContent = title;
   $('#backBtn').hidden = !showBack;
@@ -1271,6 +1398,7 @@ function Home() {
     accountBox(),
     timerSettings(),
     voiceSettings(),
+    speakSettings(),
     installHelp(),
     updateBox(),
     h('p', null, 'כדאי להפעיל את הקול בטלפון: המשחק מקריא מילים באנגלית. אם אין קול, בדקו שמצב שקט כבוי ושהווליום פתוח.'),
@@ -1324,7 +1452,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = '01b5298d', APP_BUILT = '16.11.2026 16:18';
+const APP_VERSION = '45d99e12', APP_BUILT = '16.11.2026 16:23';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -1621,6 +1749,19 @@ function accountBox() {
   return box;
 }
 
+function speakSettings() {
+  const box = h('div', { class: 'card', style: 'margin:12px 0' }, h('b', null, '🎤 דיבור'));
+  if (!Mic.ok && !Mic.SR) { box.append(h('p', { style: 'margin:6px 0 0' }, 'בדפדפן הזה אין גישה למיקרופון, אז שלבי הדיבור מוצגים בלי הקלטה.')); return box; }
+  box.append(h('p', { style: 'margin:6px 0 0;font-size:14px' }, 'בשלבי הדיבור הילד מקליט את עצמו ושומע את ההקלטה ליד הקול של המשחק. ההקלטה נשארת רק בזיכרון של הטלפון, לא נשמרת ולא נשלחת לשום מקום.'));
+  if (Mic.SR) {
+    const on = RAW.get('asr', false) === true;
+    const cb = h('input', { type: 'checkbox', id: 'asrCb' }); cb.checked = on;
+    cb.addEventListener('change', () => { RAW.set('asr', cb.checked); toast(cb.checked ? 'בדיקת ההגייה האוטומטית הופעלה בטלפון הזה.' : 'בדיקת ההגייה האוטומטית כבויה. הקול לא נשלח לשום מקום.'); });
+    box.append(h('label', { for: 'asrCb', class: 'check-row' }, cb, ' בדיקת הגייה אוטומטית'),
+      h('p', { style: 'margin:4px 0 0;font-size:13px' }, 'כבוי כברירת מחדל. כשמפעילים, הקול של הילד נשלח לשירות זיהוי הדיבור של הדפדפן (בכרום: השרתים של גוגל) כדי לבדוק מה נאמר, ובמקום הקלטה המשחק אומר מה הוא שמע. הבדיקה סלחנית ולא משפיעה על הנקודות. ההגדרה נשמרת רק בטלפון הזה.'));
+  }
+  return box;
+}
 function voiceSettings() {
   const box = h('div', { class: 'card', style: 'margin:12px 0' });
   if (!Speech.ok) { box.append(h('p', { style: 'margin:0' }, '🔊 הדפדפן הזה לא תומך בהקראה.')); return box; }
@@ -2834,7 +2975,7 @@ function StageTalk(res) {
         h('span', { class: 'big-en en' }, item.p), ear(item.p, 'mini-ear'),
         h('p', null, h('b', null, heOf(item.he))),
         h('p', null, '💡 אומרים את זה ', item.when),
-        reply);
+        reply, speakBox(item.p));
       card.append(c); enter(c);
       nextBtn.classList.remove('hidden');
       say();
