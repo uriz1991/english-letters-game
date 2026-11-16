@@ -314,6 +314,7 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .bub .tx small{display:block;font-size:14px;color:var(--muted);margin-top:4px;font-weight:600}
 .bub.npc{align-self:flex-end;flex-direction:row-reverse}.bub.npc .tx{border-bottom-left-radius:6px}
 .bub.mine{align-self:flex-start;flex-direction:row-reverse}.bub.mine .tx{background:var(--green-soft);border-bottom-right-radius:6px}
+.dg-hi{color:var(--orange-dark,#c9621f);text-decoration:underline;text-decoration-thickness:4px;text-underline-offset:6px}
 .speak{margin-top:10px;padding-top:10px;border-top:2px dashed rgba(0,0,0,.08)}
 .speak-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .speak-btn{background:var(--orange,#f08a24);box-shadow:0 4px 0 #b9651a}
@@ -1327,11 +1328,11 @@ function EndScreen(stageKey, earned, again, nextIdx) {
    Home
    ========================================================= */
 const STAGES = [];
-const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה', talk: 'מדברים', link: 'מילים מחברות', sentence: 'בונים משפט', chat: 'שיחות' };
+const RESUME_NAMES = { listen: 'מה שמעת?', pairs: 'זוגות', mirror: 'אתגר אותיות מראה', build: 'בונים מילה', missing: 'מה חסר?', 'write-letters': 'כותבים אותיות', 'write-words': 'כותבים מילה', read: 'קוראים מילה', talk: 'מדברים', link: 'מילים מחברות', sentence: 'בונים משפט', chat: 'שיחות', digraph: 'צירופי אותיות' };
 const RESUME_RUN = {
   listen: d => StageListen(d), pairs: d => StagePairs(d), mirror: d => MirrorChallenge(d.earned, d),
   build: d => StageBuild(d), missing: d => StageMissing(d), 'write-letters': d => WriteLetters(d), 'write-words': d => WriteWords(d),
-  read: d => StageRead(d), talk: d => StageTalk(d), link: d => StageLink(d), sentence: d => StageSentence(d), chat: d => StageChat(d),
+  read: d => StageRead(d), talk: d => StageTalk(d), link: d => StageLink(d), sentence: d => StageSentence(d), chat: d => StageChat(d), digraph: d => StageDigraph(d),
 };
 function goalBar() {
   const min = Math.floor(todaySec() / 60), goal = state.goal;
@@ -1465,7 +1466,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = 'b9a2a08f', APP_BUILT = '16.11.2026 16:34';
+const APP_VERSION = '3140e9c0', APP_BUILT = '16.11.2026 16:36';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -3494,6 +3495,72 @@ function StageChat(res) {
 }
 
 /* =========================================================
+   Stage 11: צירופי אותיות (two letters, one sound: sh, ch, th, ck, ee, oo, ph)
+   Words come from the game's word list: only words with one pair from the set, and none where the pair
+   breaks its own rule (school, chef: those keep their own tip).
+   ========================================================= */
+const DIGRAPHS = { sh: 'נשמעות כמו ש', ch: 'נשמעות כמו צ׳', th: 'נשמעות ביחד, כשהלשון בין השיניים', ck: 'נשמעות כמו ק', ee: 'נשמעות כמו אִי', oo: 'נשמעות כמו אוּ', ph: 'נשמעות כמו פ' };
+const DG_SETS = { 1: ['sh', 'ch', 'th'], 2: ['ck', 'ee', 'oo', 'ph'] };
+const DG_SKIP = ['chef', 'school', 'anchor', 'headache', 'parachute', 'toothbrush', 'mushroom', 'chicken', 'chick', 'cheese', 'sheep', 'three', 'tooth'];
+function dgPool(set) {
+  const seen = new Set();
+  return WORDS.filter(w => !seen.has(w.w) && seen.add(w.w) && !DG_SKIP.includes(w.w) && !(w.w in MANUAL_TIPS) && /^[a-z]+$/.test(w.w)
+    && set.filter(p => w.w.includes(p)).length === 1 && Object.keys(DIGRAPHS).filter(p => w.w.includes(p)).length === 1);
+}
+const dgOf = (w, set) => set.find(p => w.includes(p));
+
+function StageDigraph(res) {
+  const set = (Run && Run.pairs) || (state.level >= 2 ? DG_SETS[2] : DG_SETS[1]);
+  const pool = dgPool(set);
+  let list, round = 0, earned = 0;
+  if (res && res.list) { list = res.list.map(findWord).filter(Boolean); round = res.round || 0; earned = res.earned || 0; }
+  else {
+    // every pair of the set comes up, words that were hard come back first
+    const weak = shuffle(pool.filter(w => Mastery.isWeak('W:' + w.w))).slice(0, 2);
+    const per = set.map(p => shuffle(pool.filter(w => dgOf(w.w, set) === p && !weak.includes(w))));
+    const mix = []; for (let i = 0; mix.length < 12 && i < 6; i++) per.forEach(a => { if (a[i]) mix.push(a[i]); });
+    list = [...weak, ...mix].slice(0, (Run && Run.rounds) || 8);
+  }
+  const ROUNDS = list.length;
+  const saveAt = r => Resume.save('digraph', { list: list.map(w => w.w), round: r, earned });
+  function play() {
+    saveAt(round);
+    const app = screen('צירופי אותיות');
+    const w = list[round], pair = dgOf(w.w, set), at = w.w.indexOf(pair), hear = round % 2 === 0;
+    let solved = false, firstTry = true; Guard.start();
+    const say = () => Speech.en(w.w, .75);
+    const msg = h('p', { class: 'sub' }), card = h('div');
+    const nextBtn = nextButton(round === ROUNDS - 1, () => { round++; if (round >= ROUNDS) EndScreen('digraph', earned, () => StageDigraph()); else play(); });
+    const shown = (blank) => h('div', { class: 'gap-line en' }, fmt(w.w.slice(0, at)), h('span', { class: blank ? 'gap' : 'dg-hi' }, blank ? '__' : fmt(pair)), fmt(w.w.slice(at + pair.length)));
+    // hearing round: only the picture and the sound; spelling round: the word with the pair missing
+    const word = hear ? h('div', { class: 'gap-line' }, '🔊 ❓') : shown(true);
+    const opts = h('div', { class: 'opts row-opts' }, shuffle(set).map(p => h('button', { class: 'opt en', type: 'button', onclick: e => {
+      if (solved) return;
+      if (p === pair) {
+        solved = true; e.currentTarget.classList.add('right'); pop(e.currentTarget); burst(e.currentTarget);
+        earned += Guard.star('digraph');
+        Mastery.rec('W:' + w.w, firstTry); Mastery.rec('D:' + pair, firstTry);
+        word.replaceWith(shown(false));
+        msg.textContent = 'נכון! 🎉';
+        const c = h('div', { class: 'hint blue say-card' }, h('span', { class: 'big-en en' }, w.w), h('p', null, h('b', null, w.he)),
+          h('p', null, '💡 ', ...bi(`האותיות ${pair} ביחד ${DIGRAPHS[pair]}.`)), speakBox(w.w));
+        card.append(c); enter(c); nextBtn.classList.remove('hidden');
+        say(); saveAt(round + 1 < ROUNDS ? round + 1 : round);
+        setTimeout(() => nextBtn.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
+      } else {
+        firstTry = false; Guard.miss(); e.currentTarget.classList.add('wrong'); shake(e.currentTarget);
+        msg.replaceChildren(...bi(`לא ${p}: האותיות ${p} ${DIGRAPHS[p]}. ` + g('הקשב', 'הקשיבי') + ' שוב 🙂')); say();
+      }
+    } }, fmt(p))));
+    msg.textContent = hear ? 'איזה צירוף אותיות ' + g('שומע', 'שומעת') + ' במילה?' : 'אילו שתי אותיות חסרות?';
+    app.append(progressDots(ROUNDS, round), h('div', { class: 'prompt' }, 'שתי אותיות, צליל אחד'), speakerPic(w.e, say), word, msg, opts, card, nextBtn);
+    enter(opts);
+    setTimeout(say, 350);
+  }
+  play();
+}
+
+/* =========================================================
    Stage registry
    ========================================================= */
 STAGES.push(
@@ -3506,6 +3573,7 @@ STAGES.push(
   { key: 'talk',    icon: '💬', name: 'מדברים',     desc: 'ביטויים של כל יום, ומתי אומרים אותם', run: () => StageTalk() },
   { key: 'link',    icon: '🔗', name: 'מילים מחברות', desc: 'I, you, am, is, are, a, an: המילים שכל משפט צריך', run: () => StageLink() },
   { key: 'sentence', icon: '🗣️', name: 'בונים משפט', desc: 'משפטים כמו I am, I like, I can, ואומרים אותם בקול', run: () => StageSentence() },
+  { key: 'digraph', icon: '🔤', name: 'צירופי אותיות', desc: 'שתי אותיות וצליל אחד: sh, ch, th, ck, ee, oo', run: () => StageDigraph() },
   { key: 'chat',    icon: '💭', name: 'שיחות',      desc: 'שיחה קצרה עם תורות: שומעים, עונים ואומרים בקול', run: () => StageChat() },
 );
 
@@ -3531,6 +3599,7 @@ const KIND = {
   link: { icon: '🔗', name: 'מילים מחברות', run: () => StageLink() },
   frame: { icon: '🗣️', name: 'בונים משפט', run: () => StageSentence() },
   chat: { icon: '💭', name: 'שיחה', run: () => StageChat() },
+  digraph: { icon: '🔤', name: 'צירופי אותיות', run: () => StageDigraph() },
   chest: { icon: '🎁', name: 'תיבת הפתעה' },
 };
 const PHASES = { 1: 'אותיות, מילים וכתיבה', 2: 'מילים ומבחן כתיבה', 3: 'ביטויים של כל יום', 4: 'בונים משפטים', 5: 'שיחות', 6: 'תרגול בלי סוף' };
@@ -3574,6 +3643,12 @@ const MAP = (() => {
     add({ ...base, kind: 'wwrite', rounds: 3 }); add({ ...base, kind: 'build', pct: .9, quiz: true, title: 'מבחן כתיבה' });
     add({ ...base, kind: 'chest' });
   });
+  // map v2: two letters, one sound (end of the words phase)
+  { const base = { phase: 2, v: 2, letters: [], known: ALL_ABC, level: 3, opts: 3, pct: .75, tag: 'צירופים', key: 'dg' };
+    add({ ...base, kind: 'digraph', pairs: DG_SETS[1], key: 'dg1', title: 'צירופי אותיות: sh ch th' });
+    add({ ...base, kind: 'digraph', pairs: DG_SETS[2], key: 'dg2', title: 'צירופי אותיות: ck ee oo ph' });
+    add({ ...base, kind: 'digraph', pairs: [...DG_SETS[1], ...DG_SETS[2]].filter(p => p !== 'ph'), quiz: true, pct: .85, rounds: 10, title: '🏁 בוחן צירופים' });
+    add({ ...base, kind: 'chest' }); }
   [1, 2, 3].forEach(l => {
     const base = { phase: 3, letters: [], known: ALL_ABC, level: l, opts: 5, pct: .8, tag: `ביטויים ${l}`, key: 't' + l };
     add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk' }); add({ ...base, kind: 'talk', pct: .9, quiz: true });
