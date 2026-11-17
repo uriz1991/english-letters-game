@@ -14,6 +14,50 @@ service cloud.firestore {
         && request.resource.data.progress is string && request.resource.data.progress.size() <= 300000
         && request.resource.data.updated is int;
     }
+    // The parent code (the same on every phone of the account): only a salt and a SHA-256, never the code itself.
+    match /parents/{uid}/meta/{doc} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid && doc == 'pin'
+        && request.resource.data.keys().hasOnly(['salt', 'hash', 't'])
+        && request.resource.data.keys().hasAll(['salt', 'hash', 't'])
+        && request.resource.data.salt is string && request.resource.data.salt.matches('^[0-9a-f]{32}$')
+        && request.resource.data.hash is string && request.resource.data.hash.matches('^[0-9a-f]{64}$')
+        && request.resource.data.t is int;
+    }
+
+    // Everyone's leaderboard (a parent adds a child; off by default).
+    // boardOwner/{bid}: which parent owns entry bid, and for which child. Only that parent can see it.
+    // Created once, never changed (no update), removed by its parent.
+    match /boardOwner/{bid} {
+      allow get, list, delete: if request.auth != null && resource.data.o == request.auth.uid;
+      allow create: if request.auth != null && bid.matches('^[a-z0-9]{20}$')
+        && request.resource.data.keys().hasOnly(['o', 'k']) && request.resource.data.keys().hasAll(['o', 'k'])
+        && request.resource.data.o == request.auth.uid
+        && request.resource.data.k is string && request.resource.data.k.matches('^[a-z0-9]{4,20}$');
+    }
+    // board/{bid}: numbers only (nickname word numbers, avatar number, station, stars). No name, no time, no text.
+    // Any signed-in parent can read it; only the parent in boardOwner/{bid} can write or remove it.
+    match /board/{bid} {
+      allow read: if request.auth != null;
+      allow delete: if isBoardOwner(bid);
+      allow create, update: if isBoardOwner(bid) && okBoard(request.resource.data);
+    }
+    function isBoardOwner(bid) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/boardOwner/$(bid))
+        && get(/databases/$(database)/documents/boardOwner/$(bid)).data.o == request.auth.uid;
+    }
+    function okInt(v, lo, hi) {
+      return v is int && v >= lo && v <= hi;
+    }
+    function okBoard(d) {
+      return d.keys().hasOnly(['a', 'b', 'n', 'av', 'at', 'st', 'sc'])
+        && d.keys().hasAll(['a', 'b', 'n', 'av', 'at', 'st', 'sc'])
+        && okInt(d.a, 0, 39) && okInt(d.b, 0, 39) && okInt(d.n, 0, 99) && okInt(d.av, 0, 39)
+        && okInt(d.at, 0, 100000) && okInt(d.st, 0, 999999)
+        && d.sc == d.at * 1000000 + d.st;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

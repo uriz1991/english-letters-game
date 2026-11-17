@@ -106,6 +106,13 @@ header.top{gap:6px;padding-left:12px;padding-right:12px}
 .board-row .rank{font-size:24px;width:30px;text-align:center;font-weight:800}.board-row .av{font-size:30px}
 .board-row .nm{flex:1}.board-row .nm b{display:block}.board-row .nm small{opacity:.75}
 .board-row .pts{font-weight:800;color:#e09412;white-space:nowrap}
+.board-tabs{margin:4px 0 6px}.board-tabs button{flex:1;font-size:17px}
+.board-gap{text-align:center;color:var(--muted);font-weight:800;letter-spacing:4px}
+.board-me{text-align:center;font-weight:800;font-size:18px;margin:4px 0 10px}
+.bd-kid{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.bd-kid:last-child{border-bottom:0}
+.bd-kid .av{font-size:28px}.bd-kid .nm{flex:1;min-width:150px;font-weight:700}.bd-kid .nm small{display:block;font-weight:400;color:var(--muted);font-size:13px}
+.bd-kid .acts{display:flex;gap:6px}
 .kids-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .kid-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line,#eee4d4)}
 .kid-row:last-child{border-bottom:0}
@@ -1638,8 +1645,9 @@ function resetAll() {
 /* =========================================================
    Parent code: 4 digits that keep the parents area away from the children
    (switching child, editing or deleting a child, reset, timer, account, report).
-   A lock against children, not against hackers: only a salted SHA-256 of the code is kept,
-   and only on this phone (every phone gets its own code). 5 wrong tries = a 30 second wait.
+   A lock against children, not against hackers: only a salted SHA-256 of the code is kept.
+   On the site it is also kept in the parent's account (parents/{uid}/meta/pin), so every phone signed in
+   to the account has the same code; the newest code wins. In a file it stays on the phone. 5 wrong tries = a 30 second wait.
    ========================================================= */
 function sha256js(bytes) {   // for browsers without crypto.subtle (a file opened from WhatsApp)
   const K = [], H = [], frac = x => (x - Math.floor(x)) * 4294967296 | 0;
@@ -1678,7 +1686,8 @@ const Lock = {
     const r = new Uint8Array(16);
     try { crypto.getRandomValues(r); } catch (e) { r.forEach((v, i) => { r[i] = Math.random() * 256; }); }
     const salt = toHex(r.buffer);
-    RAW.set('pin', { salt, hash: await this.hash(pin, salt) }); RAW.del('pinWait');
+    RAW.set('pin', { salt, hash: await this.hash(pin, salt), t: Date.now() }); RAW.del('pinWait');
+    PinSync.push();
   },
   async check(pin) { const p = RAW.get('pin', null); return !!(p && p.salt) && await this.hash(pin, p.salt) === p.hash; },
   // kept in storage, so closing and opening the game does not skip the wait
@@ -1687,12 +1696,37 @@ const Lock = {
   pass() { RAW.del('pinWait'); this.open = true; },
 };
 const parentOnly = fn => Lock.open ? fn() : ParentGate(fn);
+// the code in the parent's account. Errors are quiet: the code on the phone keeps working without the account.
+const PinSync = {
+  doc(p) { return { fields: { salt: { stringValue: p.salt }, hash: { stringValue: p.hash }, t: { integerValue: String(p.t || 0) } } }; },
+  async push() {
+    const p = RAW.get('pin', null);
+    if (!Sync.on() || !p || !navigator.onLine) return;
+    try { const uid = await Cloud.uid(); await Sync.api('PATCH', `/parents/${uid}/meta/pin`, this.doc(p)); } catch (e) {}
+  },
+  // newer one wins: the account's code comes to this phone, or this phone's newer code goes to the account
+  async pull() {
+    if (!Sync.on() || !navigator.onLine) return;
+    try {
+      const uid = await Cloud.uid();
+      const d = await Sync.api('GET', `/parents/${uid}/meta/pin`), f = d && d.fields, local = RAW.get('pin', null);
+      const c = f && f.salt && f.hash ? { salt: f.salt.stringValue, hash: f.hash.stringValue, t: Number((f.t && f.t.integerValue) || 0) } : null;
+      if (c && /^[0-9a-f]{32}$/.test(c.salt) && /^[0-9a-f]{64}$/.test(c.hash) && (!local || (local.t || 0) < c.t)) RAW.set('pin', c);
+      else if (local && (!c || (local.t || 0) > c.t)) await this.push();
+    } catch (e) {}
+  },
+};
 /* The code window (on top of the screen, so a game in the middle is not lost).
    No code yet on this phone: first a sum for grown-ups, then the parent picks a code and types it twice.
    Forgot the code: on the site the parent signs in again with the same Google account; in a file, the sum.
    mode 'new' = pick a new code (the parent is already inside). */
 function ParentGate(then, cancel, mode) {
   const m = $('#modal');
+  if (!mode && !Lock.has() && Sync.on() && navigator.onLine) {
+    m.replaceChildren(h('div', { class: 'card pin-card', role: 'dialog', 'aria-modal': 'true' }, h('p', { class: 'sub' }, '⏳ בודקים אם כבר יש קוד הורים בחשבון...')));
+    m.hidden = false;
+    return Promise.race([PinSync.pull(), new Promise(z => setTimeout(z, 6000))]).then(() => ParentGate(then, cancel, 'checked'));
+  }
   let step = mode === 'new' ? 'new' : Lock.has() ? 'enter' : 'adult';
   let code = '', first = '', msg = '', busy = false, q = null, tick = null;
   const card = h('div', { class: 'card pin-card', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'קוד הורים' });
@@ -1787,6 +1821,43 @@ function kidReport(id) {
   ParentReport();
   cleanup = () => loadProfile(back);
 }
+// parents area: which children are on everyone's board (off by default)
+function boardBox() {
+  const box = h('div', { class: 'card', id: 'boardBox', style: 'margin:12px 0' });
+  let msg = '', busy = false;
+  const say = e => {
+    const k = Board.err(e);
+    msg = k === 'off' ? '⚠️ הטבלה של כל השחקנים עוד לא הופעלה בשרת.' : k === 'offline' ? '📡 צריך אינטרנט כדי לשנות את הטבלה.' : '⚠️ משהו לא הצליח. נסו שוב בעוד רגע.';
+  };
+  const act = async fn => {
+    if (busy) return;
+    busy = true; msg = '⏳ רגע...'; draw();
+    try { await fn(); msg = ''; } catch (e) { say(e); }
+    busy = false; if (box.isConnected) draw();
+  };
+  function draw() {
+    const kids = [h('b', null, '🌍 טבלת כל השחקנים'),
+      h('p', { style: 'margin:6px 0;font-size:14px' }, 'ילד שמצרפים מופיע בטבלה של כל השחקנים באתר, בכינוי משחק אוטומטי כמו "אריה כחול 27". בטבלה יש רק את הכינוי, הדמות, מספר התחנה והכוכבים במפה. אין בה שם, תמונה או שום פרט אחר. כבוי כברירת מחדל.')];
+    if (!Cloud.possible() || !Sync.on()) kids.push(h('p', { style: 'margin:6px 0' }, 'בקובץ ששולחים בוואטסאפ אין טבלה של כל השחקנים. היא נמצאת רק באתר, אחרי כניסה של ההורה.'));
+    else {
+      const map = Board.map();
+      kids.push(h('div', null, Profiles.list().map(p => {
+        const e = map[p.id];
+        return h('div', { class: 'bd-kid' }, h('span', { class: 'av' }, p.avatar),
+          h('span', { class: 'nm' }, p.name, h('small', null, e ? `✅ בטבלה בתור "${nickName(e.a, e.b, e.n)}"` : 'לא בטבלה')),
+          h('span', { class: 'acts' }, e
+            ? [h('button', { class: 'btn secondary small', disabled: busy, 'aria-label': 'כינוי אחר', onclick: () => act(() => Board.rename(p.id)) }, '🎲 כינוי אחר'),
+               h('button', { class: 'btn secondary small', disabled: busy, onclick: () => act(() => Board.leave(p.id)) }, 'להוציא')]
+            : h('button', { class: 'btn small', disabled: busy, onclick: () => act(() => Board.join(p.id)) }, '➕ לצרף')));
+      })));
+    }
+    if (msg) kids.push(h('p', { class: 'sync-st', role: 'status', style: 'margin:8px 0 0' }, msg));
+    box.replaceChildren(...kids);
+  }
+  draw();
+  if (Cloud.possible() && Sync.on() && navigator.onLine) act(() => Board.refresh());
+  return box;
+}
 /* The parents area (behind the code): every child at a glance, then the settings */
 function ParentArea() {
   if (!Lock.open) return ParentGate(ParentArea);
@@ -1822,14 +1893,16 @@ function ParentArea() {
     h('div', { class: 'row' }, h('button', { class: 'reset-btn', onclick: resetAll }, `איפוס ההתקדמות של ${p.name}`))] : [];
   const pinBox = h('div', { class: 'card', id: 'pinBox', style: 'margin:12px 0' },
     h('b', null, '🔒 קוד ההורים'),
-    h('p', { style: 'margin:6px 0' }, 'הקוד שומר שילדים לא יחליפו ילד, לא ימחקו התקדמות ולא ישנו את הטיימר. הוא נשמר רק בטלפון הזה, ובכל טלפון בוחרים קוד משלו. זו נעילה נגד ילדים, לא הגנה מפני פריצה.'),
+    h('p', { style: 'margin:6px 0' }, 'הקוד שומר שילדים לא יחליפו ילד, לא ימחקו התקדמות ולא ישנו את הטיימר. ',
+      Sync.on() ? 'הוא נשמר בחשבון, ולכן הוא אותו קוד בכל טלפון שנכנס לחשבון הזה. ' : 'בקובץ ששולחים בוואטסאפ הוא נשמר רק בטלפון הזה. ',
+      'זו נעילה נגד ילדים, לא הגנה מפני פריצה.'),
     h('button', { class: 'btn secondary small', onclick: () => ParentGate(() => reopenParents('pinBox'), null, 'new') }, '🔑 החלפת הקוד'));
   app.append(
     h('div', { class: 'sec-title', style: 'margin-top:4px' }, '👪 הילדים'), kids,
     h('div', { class: 'row', style: 'justify-content:flex-start;margin-top:10px' }, h('button', { class: 'btn small', onclick: () => ProfileForm() }, '➕ ילד חדש')),
     ...mine,
     h('div', { class: 'sec-title' }, '⚙️ הטלפון והחשבון'),
-    pinBox, accountBox(), speakSettings(), installHelp(), updateBox(),
+    boardBox(), pinBox, accountBox(), speakSettings(), installHelp(), updateBox(),
     h('p', null, 'את הקול שמקריא את המילים הילד בוחר לבד, ב"ההגדרות שלי".'),
     h('p', null, 'הילד מתקדם במפה: כל נושא מתחיל בשיעור, אחריו תרגול ובסוף בוחן. בכפתור "חזרה ושינון" נפתח כל שלב אחרי שהילד הגיע אליו במפה.'),
     h('p', null, 'לכל ילד יש התקדמות משלו. אם יוצאים באמצע סבב, הכפתור הירוק "להמשיך" מחזיר בדיוק לאותו מקום.'),
@@ -1860,7 +1933,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = '8fd34816', APP_BUILT = '16.11.2026 22:50';
+const APP_VERSION = '8e3934a3', APP_BUILT = '17.11.2026 10:15';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -2012,6 +2085,9 @@ const Sync = {
   },
   removed(id) {
     RAW.del(`p${id}_upd`);
+    // the child's entry on everyone's board comes down too
+    const bm = RAW.get('bmap', {});
+    if (bm[id]) { RAW.set('bdel', [...new Set([...RAW.get('bdel', []), bm[id].bid])]); delete bm[id]; RAW.set('bmap', bm); }
     const d = this.dirty(); delete d[id]; RAW.set('dirty', d);
     const s = RAW.get('synced', []);
     if (this.on() && s.includes(id)) { RAW.set('delq', [...new Set([...RAW.get('delq', []), id])]); RAW.set('synced', s.filter(x => x !== id)); }
@@ -2048,13 +2124,16 @@ const Sync = {
         await this.api('DELETE', `/parents/${uid}/kids/${id}`, null, keepalive);
         RAW.set('delq', RAW.get('delq', []).filter(x => x !== id));
       }
+      const sent = [];
       for (const id of Object.keys(this.dirty())) {
         if (!Profiles.get(id)) { const d = this.dirty(); delete d[id]; RAW.set('dirty', d); continue; }
+        sent.push(id);
         const at = RAW.get(`p${id}_upd`, 0);
         await this.api('PATCH', `/parents/${uid}/kids/${id}`, this.kidDoc(id), keepalive);
         const d = this.dirty(); if (RAW.get(`p${id}_upd`, 0) === at) delete d[id]; RAW.set('dirty', d);   // changed while sending: send again
         const s = RAW.get('synced', []); if (!s.includes(id)) RAW.set('synced', [...s, id]);
       }
+      await Board.after(sent);
       this.setStatus(this.pending() ? 'saving' : 'saved');
       if (this.pending()) this.later(2000);
     } catch (e) {
@@ -2114,6 +2193,7 @@ const Sync = {
       await Cloud.load();
       if (!Cloud.user) return;
       const changed = await this.pull();
+      await PinSync.pull();
       await this.push();
       if (changed && document.querySelector('#app .kid-home, #app .who')) { renderStars(); Home(); }
       else if (changed && document.querySelector('#app .stage-list')) { renderStars(); Practice(); }
@@ -2125,6 +2205,143 @@ const Sync = {
     Profiles.save([]);
     for (const k of ['active', 'dirty', 'synced', 'delq']) RAW.del(k);
     PID = null;
+  },
+};
+/* =========================================================
+   Everyone's leaderboard (on the site only, and only for children the parent added). Firestore:
+   boardOwner/{bid} = { o: parent's account id, k: child id }. Only that parent can read it: it says whose entry bid is.
+   board/{bid} = numbers only: a, b, n = the nickname (word numbers in the fixed lists below + a number),
+     av = avatar number, at = station, st = stars on the map, sc = at * 1000000 + st (one number to sort by).
+   No name, no time, no free text. bid is random, so nothing in the public entry leads to the parent.
+   The account (not this phone) is the source of who is on the board, so a reset, another phone
+   or a deleted child never leaves an entry that nobody can remove.
+   ========================================================= */
+// APPEND ONLY: entries keep index numbers into these lists
+const NICK_ANIMALS = [['אריה', 'm'], ['נמר', 'm'], ['דולפין', 'm'], ['פיל', 'm'], ['ינשוף', 'm'], ['תוכי', 'm'], ['קנגורו', 'm'], ['פינגווין', 'm'],
+  ['זאב', 'm'], ['סנאי', 'm'], ['צב', 'm'], ['דוב', 'm'],
+  ['ג׳ירפה', 'f'], ['זברה', 'f'], ['לביאה', 'f'], ['דבורה', 'f'], ['ציפור', 'f'], ['חסידה', 'f'], ['ארנבת', 'f'], ['נמרה', 'f'],
+  ['צבייה', 'f'], ['סנאית', 'f'], ['פנדה', 'f'], ['לוטרה', 'f']];
+const NICK_ADJ = [['כחול', 'כחולה'], ['ירוק', 'ירוקה'], ['סגול', 'סגולה'], ['כתום', 'כתומה'], ['מהיר', 'מהירה'], ['אמיץ', 'אמיצה'], ['חכם', 'חכמה'],
+  ['שמח', 'שמחה'], ['זריז', 'זריזה'], ['נוצץ', 'נוצצת'], ['קופץ', 'קופצת'], ['צוחק', 'צוחקת'], ['חזק', 'חזקה'], ['סקרן', 'סקרנית'], ['זוהר', 'זוהרת'], ['נדיב', 'נדיבה']];
+const nickName = (a, b, n) => {
+  const an = NICK_ANIMALS[a] || NICK_ANIMALS[0], ad = NICK_ADJ[b] || NICK_ADJ[0];
+  return `${an[0]} ${an[1] === 'f' ? ad[1] : ad[0]} ${n}`;
+};
+const randId = n => {
+  const r = new Uint8Array(n);
+  try { crypto.getRandomValues(r); } catch (e) { r.forEach((v, i) => { r[i] = Math.random() * 256; }); }
+  return [...r].map(x => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join('');
+};
+const Board = {
+  cache: null, rankCache: null,
+  map() { return RAW.get('bmap', {}); },   // child id -> { bid, a, b, n }: this phone's copy of what the account says
+  err(e) { return e && /\b403\b/.test(e.message) ? 'off' : navigator.onLine ? 'error' : 'offline'; },
+  newNick(g) {
+    const pool = NICK_ANIMALS.map((x, i) => [x[1], i]).filter(([gg]) => gg === (g === 'f' ? 'f' : 'm')).map(([, i]) => i);
+    return { a: pick(pool), b: Math.floor(Math.random() * NICK_ADJ.length), n: Math.floor(Math.random() * 100) };
+  },
+  fields(id, e) {
+    const m = normMap(RAW.get(`p${id}_map`, null)) || { at: 0, pass: {} };
+    const p = Profiles.get(id), at = Math.min(100000, m.at), st = Math.min(999999, mapStars(m));
+    return { a: e.a, b: e.b, n: e.n, av: Math.max(0, AVATARS.indexOf(p ? p.avatar : '')), at, st, sc: at * 1000000 + st };
+  },
+  doc(f) { const fields = {}; for (const [k, v] of Object.entries(f)) fields[k] = { integerValue: String(v) }; return { fields }; },
+  num(d, k) { const f = (d && d.fields) || {}; return Number((f[k] && f[k].integerValue) || 0); },
+  // which of my children are on the board, read from the account
+  async refresh() {
+    const uid = await Cloud.uid();
+    const rows = await Sync.api('POST', ':runQuery', { structuredQuery: { from: [{ collectionId: 'boardOwner' }],
+      where: { fieldFilter: { field: { fieldPath: 'o' }, op: 'EQUAL', value: { stringValue: uid } } }, limit: 100 } });
+    // children in the account (ids only): a child made on another phone and not yet here is not "deleted"
+    const kids = await Sync.api('GET', `/parents/${uid}/kids?pageSize=100&mask.fieldPaths=g`);
+    const inAcct = new Set(((kids && kids.documents) || []).map(d => d.name.split('/').pop()));
+    const old = this.map(), map = {}, gone = [];
+    for (const r of rows || []) {
+      if (!r.document) continue;
+      const bid = r.document.name.split('/').pop(), k = r.document.fields && r.document.fields.k && r.document.fields.k.stringValue;
+      if (k && Profiles.get(k)) map[k] = { bid };
+      else if (!k || !inAcct.has(k)) gone.push(bid);   // the child was deleted: take the entry down
+    }
+    for (const [k, e] of Object.entries(map)) {
+      const o = old[k];
+      if (o && o.bid === e.bid && o.a != null) { Object.assign(e, { a: o.a, b: o.b, n: o.n }); continue; }
+      const d = await Sync.api('GET', `/board/${e.bid}`);
+      Object.assign(e, { a: this.num(d, 'a'), b: this.num(d, 'b'), n: this.num(d, 'n') });
+    }
+    RAW.set('bmap', map); RAW.set('bref', Date.now());
+    for (const bid of gone) await this.remove(bid);
+    return map;
+  },
+  // the public entry first, then the owner record (the entry's delete rule needs the owner record)
+  async remove(bid) {
+    for (const path of [`/board/${bid}`, `/boardOwner/${bid}`]) {
+      try { await Sync.api('DELETE', path); } catch (e) { if (!/\b403\b/.test(e.message)) throw e; }   // 403 = already gone
+    }
+    this.cache = null;
+  },
+  async join(id) {
+    if (this.map()[id]) return;
+    const uid = await Cloud.uid(), p = Profiles.get(id), bid = randId(20), nick = this.newNick(p && p.g);
+    await Sync.api('PATCH', `/boardOwner/${bid}?currentDocument.exists=false`, { fields: { o: { stringValue: uid }, k: { stringValue: id } } });
+    const f = this.fields(id, nick);
+    await Sync.api('PATCH', `/board/${bid}`, this.doc(f));
+    RAW.set('bmap', { ...this.map(), [id]: { bid, ...nick } });
+    RAW.set('bsent', { ...RAW.get('bsent', {}), [bid]: JSON.stringify(f) });
+    this.cache = null;
+  },
+  async leave(id) {
+    const e = this.map()[id]; if (!e) return;
+    await this.remove(e.bid);
+    const m = this.map(); delete m[id]; RAW.set('bmap', m);
+  },
+  async rename(id) {
+    const e = this.map()[id]; if (!e) return;
+    const p = Profiles.get(id), nick = this.newNick(p && p.g), f = this.fields(id, nick);
+    await Sync.api('PATCH', `/board/${e.bid}`, this.doc(f));
+    RAW.set('bmap', { ...this.map(), [id]: { ...e, ...nick } });
+    RAW.set('bsent', { ...RAW.get('bsent', {}), [e.bid]: JSON.stringify(f) });
+    this.cache = null;
+  },
+  // after a child was saved: update the entry if the numbers changed
+  async push(id) {
+    const e = this.map()[id]; if (!e || e.a == null) return;
+    const f = this.fields(id, e), sig = JSON.stringify(f);
+    if (RAW.get('bsent', {})[e.bid] === sig) return;
+    await Sync.api('PATCH', `/board/${e.bid}`, this.doc(f));
+    RAW.set('bsent', { ...RAW.get('bsent', {}), [e.bid]: sig });
+  },
+  // called by Sync after saving. Never changes the save status: the board is extra, the children's progress is what matters
+  async after(ids) {
+    try {
+      for (const bid of RAW.get('bdel', [])) { await this.remove(bid); RAW.set('bdel', RAW.get('bdel', []).filter(x => x !== bid)); }
+      if (Date.now() - RAW.get('bref', 0) > 12 * 3600 * 1000) await this.refresh();
+      for (const id of ids) await this.push(id);
+    } catch (e) {}
+  },
+  // top 50, kept for 3 minutes so switching tabs does not read everything again
+  async top() {
+    if (this.cache && Date.now() - this.cache.t < 180000) return this.cache.rows;
+    const out = await Sync.api('POST', ':runQuery', { structuredQuery: { from: [{ collectionId: 'board' }],
+      orderBy: [{ field: { fieldPath: 'sc' }, direction: 'DESCENDING' }], limit: 50 } });
+    const rows = (out || []).filter(r => r.document).map(r => {
+      const d = r.document, x = k => this.num(d, k);
+      return { bid: d.name.split('/').pop(), a: x('a'), b: x('b'), n: x('n'), av: x('av'), at: x('at'), st: x('st'), sc: x('sc') };
+    });
+    this.cache = { t: Date.now(), rows };
+    return rows;
+  },
+  // my place = how many entries are ahead of me + 1
+  async rank(id) {
+    const e = this.map()[id]; if (!e || e.a == null) return null;
+    const sc = this.fields(id, e).sc;
+    if (this.rankCache && this.rankCache.sc === sc && Date.now() - this.rankCache.t < 180000) return this.rankCache.n;
+    const out = await Sync.api('POST', ':runAggregationQuery', { structuredAggregationQuery: {
+      structuredQuery: { from: [{ collectionId: 'board' }], where: { fieldFilter: { field: { fieldPath: 'sc' }, op: 'GREATER_THAN', value: { integerValue: String(sc) } } } },
+      aggregations: [{ alias: 'n', count: {} }] } });
+    const r = (out || []).find(x => x.result);
+    const n = 1 + Number((r && r.result.aggregateFields && r.result.aggregateFields.n && r.result.aggregateFields.n.integerValue) || 0);
+    this.rankCache = { sc, n, t: Date.now() };
+    return n;
   },
 };
 onKidChange = id => Sync.touch(id);
@@ -4317,11 +4534,17 @@ function boardText(rows) {
     ...rows.map((r, i) => `${MEDAL[i] || `${i + 1}.`} ${r.avatar} ${r.name}: תחנה ${r.at + 1} · ⭐ ${r.mstars}${r.fire ? ` · 🔥 ${r.fire} ימים` : ''}`),
     '', 'מי מגיע הכי רחוק במפה? בואו לשחק איתנו 👇', SITE].join('\n');
 }
-function LeaderBoard() {
+let boardTab = 'family';
+function LeaderBoard(tab) {
   endRun();
+  if (tab) boardTab = tab;
   const rows = kidBoard();
   const app = screen('טבלת האלופים');
-  app.append(h('div', { class: 'home-hello' }, h('h1', null, '🏆 טבלת האלופים'), h('p', { class: 'sub' }, 'מי הגיע הכי רחוק במפה?')),
+  const tabs = h('div', { class: 'seg board-tabs', role: 'tablist' }, [['family', '👪 המשפחה'], ['all', '🌍 כולם']].map(([k, t]) =>
+    h('button', { class: k === boardTab ? 'on' : '', role: 'tab', 'aria-selected': String(k === boardTab), onclick: () => LeaderBoard(k) }, t)));
+  app.append(h('div', { class: 'home-hello' }, h('h1', null, '🏆 טבלת האלופים'), h('p', { class: 'sub' }, 'מי הגיע הכי רחוק במפה?')), tabs);
+  if (boardTab === 'all') return allBoard(app);
+  app.append(
     h('div', { class: 'board' }, rows.map((r, i) => h('div', { class: 'board-row' + (r.id === PID ? ' me' : '') },
       h('span', { class: 'rank' }, MEDAL[i] || `${i + 1}`), h('span', { class: 'av' }, r.avatar),
       h('span', { class: 'nm' }, h('b', null, r.name), h('small', null, `תחנה ${r.at + 1}` + (r.fire ? ` · 🔥 ${r.fire} ימים` : ''))),
@@ -4334,6 +4557,36 @@ function LeaderBoard() {
     h('p', { class: 'sub', style: 'margin-top:10px;font-size:13px' }, 'נשלחים רק הכינוי, הדמות, מספר התחנה והכוכבים במפה.'),
     h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה')));
   enter($('.board', app));
+}
+// everyone on the site: top 50 and my place
+async function allBoard(app) {
+  const body = h('div', { class: 'board-all' }, h('p', { class: 'sub' }, '⏳ טוענים את כל השחקנים...'));
+  app.append(body, h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => MapScreen() }, '🗺️ למפה')));
+  const note = t => body.replaceChildren(h('p', { class: 'sub', style: 'margin:16px 0' }, t));
+  if (!Cloud.possible() || !Sync.on()) return note('את הטבלה של כל השחקנים רואים רק באתר, אחרי שההורה נכנס.');
+  if (!navigator.onLine) return note('📡 אין אינטרנט. כשהחיבור יחזור, יופיעו כאן כל השחקנים.');
+  const mine = Board.map()[PID];
+  let top, rank = null;
+  try { top = await Board.top(); if (mine) rank = await Board.rank(PID); }
+  catch (e) {
+    if (!body.isConnected) return;
+    return note(Board.err(e) === 'off' ? 'הטבלה של כל השחקנים עוד לא נפתחה. בקרוב! 🙂' : '⚠️ לא הצלחנו לטעון את הטבלה. נסו שוב בעוד רגע.');
+  }
+  if (!body.isConnected) return;   // the child already moved on
+  const meNow = mine ? Board.fields(PID, mine) : null;
+  const row = (r, i, isMe) => h('div', { class: 'board-row' + (isMe ? ' me' : '') },
+    h('span', { class: 'rank' }, MEDAL[i] || `${i + 1}`), h('span', { class: 'av' }, AVATARS[r.av] || '🙂'),
+    h('span', { class: 'nm' }, h('b', null, nickName(r.a, r.b, r.n) + (isMe ? ` (${g('אתה', 'את')})` : '')), h('small', null, `תחנה ${r.at + 1}`)),
+    h('span', { class: 'pts' }, `⭐ ${r.st}`));
+  const list = top.map((r, i) => mine && r.bid === mine.bid ? row(meNow, i, true) : row(r, i, false));
+  const inTop = mine && top.some(r => r.bid === mine.bid);
+  if (mine && !inTop && rank) list.push(h('div', { class: 'board-gap' }, '⋯'), row(meNow, rank - 1, true));
+  body.replaceChildren(...[
+    mine && rank ? h('p', { class: 'board-me' }, rank <= 10 ? `${g('אתה', 'את')} במקום ${rank}! 🎉` : `${g('אתה', 'את')} במקום ${rank}. כל תחנה במפה מקפיצה אותך למעלה 🚀`) : null,
+    top.length ? h('div', { class: 'board' }, list) : h('p', { class: 'sub', style: 'margin:16px 0' }, 'עוד אין אף אחד בטבלה. אולי תהיו הראשונים? 🙂'),
+    mine ? h('p', { class: 'sub', style: 'font-size:13px' }, `הכינוי שלך בטבלה: ${nickName(mine.a, mine.b, mine.n)}. בטבלה רואים רק כינוי, דמות, תחנה וכוכבים.`)
+      : h('p', { class: 'sub' }, `כדי להופיע כאן, ההורים ${g('מצרפים אותך', 'מצרפים אותך')} באזור ההורים 👪`)].filter(Boolean));
+  enter($('.board', body) || body);
 }
 
 /* The drawn map: one winding path from the bottom up, drawn in code so it never runs out.
