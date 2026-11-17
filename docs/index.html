@@ -55,6 +55,32 @@ header.top{gap:6px;padding-left:12px;padding-right:12px}
 .kid-home .map-go.big{padding:22px 18px;margin:4px 0 14px}.kid-home .map-go.big .ic{font-size:46px}.kid-home .map-go.big b{font-size:25px}
 .home-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 6px}
 .home-tile{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;border-radius:var(--radius);background:var(--card);box-shadow:0 4px 0 var(--line);padding:16px 8px;min-height:44px;font:inherit}
+.home-tile{position:relative}
+.home-tile.locked{opacity:.7}.home-tile.locked .ic{filter:grayscale(1)}
+.home-tile .new{position:absolute;top:-8px;inset-inline-start:-6px;background:var(--red);color:#fff;font-size:12px;font-weight:800;border-radius:99px;padding:2px 9px;box-shadow:0 2px 0 rgba(0,0,0,.15)}
+/* a character with what it wears */
+.avw{position:relative;display:inline-block;line-height:1}
+.avw > span{position:absolute;left:50%;pointer-events:none}
+.avw .w-head{top:-.38em;font-size:.58em;transform:translateX(-50%) rotate(-10deg)}
+.avw .w-face{top:.3em;font-size:.5em;transform:translateX(-50%)}
+.avw .w-neck{bottom:-.18em;font-size:.44em;transform:translateX(-50%)}
+.avw .w-a{position:static;font-size:1em}
+/* the shop */
+.shop-top{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.shop-top .avw{font-size:74px;margin:14px 6px 4px}
+.shop-top .coins{font-size:26px;font-weight:800;color:#B7791F}
+.shop-top p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.shop-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.shop-item{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;border-radius:18px;background:var(--card);box-shadow:0 4px 0 var(--line);padding:12px 4px 10px;font:inherit;min-height:44px}
+.shop-item .e{font-size:42px;line-height:1.15}
+.shop-item b{font-size:13px}
+.shop-item small{font-size:13px;font-weight:800;color:#B7791F}
+.shop-item.own small{color:var(--blue-dark)}
+.shop-item.on{box-shadow:0 0 0 3px var(--green),0 4px 0 var(--line)}.shop-item.on small{color:var(--green-dark)}
+.shop-item.far .e{filter:grayscale(.85);opacity:.6}
+.shop-lock{text-align:center}.shop-lock .big{font-size:80px}
+.shop-bar{height:14px;border-radius:99px;background:var(--line);overflow:hidden;margin:10px auto;max-width:280px}.shop-bar i{display:block;height:100%;background:linear-gradient(90deg,#F6C453,#F59E0B)}
+.pick-grid button.locked{opacity:.45;position:relative}.pick-grid button.locked::after{content:'🔒';position:absolute;bottom:2px;inset-inline-end:2px;font-size:14px}
 .home-tile.wide{grid-column:1/-1;flex-direction:row;justify-content:center;gap:12px;padding:12px 8px}
 .home-tile.wide .ic{font-size:30px}
 .home-tile .ic{font-size:40px;line-height:1.1}.home-tile b{font-size:18px}.home-tile small{font-size:13px;color:var(--muted)}
@@ -379,6 +405,9 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .ls-letter{display:flex;align-items:baseline;justify-content:center;gap:18px;margin:0 auto 6px;border:0;background:var(--blue-soft);border-radius:24px;padding:6px 26px;box-shadow:0 4px 0 var(--line);direction:ltr}
 .ls-letter .en{font-size:96px;line-height:1.1;font-weight:800;color:var(--ink)}
 .ls-letter small{font-size:22px;align-self:center}
+.wl-letters{display:flex;justify-content:center;gap:10px;margin:6px 0 2px}
+.wl-tile{min-width:58px;height:66px;border:0;border-radius:16px;background:var(--blue-soft);box-shadow:0 4px 0 var(--line);font:inherit;font-size:38px;font-weight:800;color:var(--ink)}
+.wl-arrow{text-align:center;font-size:26px;color:var(--muted);margin:2px 0}
 .ls-letter .ls-cap{opacity:.45;font-size:62px}.ls-letter .ls-to{font-size:34px;color:var(--muted);align-self:center}
 .ls-snd{color:var(--orange);white-space:nowrap}
 .ls-words{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 12px}
@@ -749,7 +778,7 @@ const store = {
   set(k, v) { RAW.set(`p${PID}_${k}`, v); onKidChange(PID); },
   del(k) { RAW.del(`p${PID}_${k}`); onKidChange(PID); },
 };
-const PROFILE_KEYS = ['intro', 'wrote', 'stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits', 'spoken'];
+const PROFILE_KEYS = ['intro', 'wrote', 'shop', 'shopSeen', 'shopToast', 'stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits', 'spoken'];
 
 const state = {
   stars: 0, stageStars: {}, done: {}, caseMode: 'upper', level: 1,
@@ -796,15 +825,26 @@ function loadProfile(id) {
     stickers: store.get('stickers', []), goal: store.get('goal', 10), timerMin: store.get('timerMin', 0), guess: store.get('guess', {}), spoken: store.get('spoken', {}),
     startedAt: null, breakShown: false,
   });
+  // the letter case comes from where the child is on the map (capitals first), never from the old switch
+  try { state.caseMode = caseOf(stationAt(mapState().at)); } catch (e) { state.caseMode = 'upper'; }
   PlayTimer.render(); Clock.render();
 }
 const fmt = s => state.caseMode === 'upper' ? s.toUpperCase() : s.toLowerCase();
 const curLevel = () => LEVELS[state.level - 1];
 // on the map, a station decides which letters and words are in play
-const newLetters = () => Run ? LETTERS.filter(x => Run.letters.includes(x.L)) : LETTERS.filter(x => x.lvl === state.level);
-const knownABC = () => Run ? Run.known : LETTERS.filter(x => x.lvl <= state.level).map(x => x.L);
+/* Outside the map ("review and practice") only what the child already learned on the map is used:
+   the letters of the letter lessons passed, and words only after the "from letters to a word" lesson. */
+const learnedABC = () => { const pass = mapState().pass; return [...new Set(MAP.filter(s => s.phase === 1 && s.kind === 'learn' && !s.words && s.cs !== 'lower' && s.id in pass).flatMap(s => s.letters))]; };
+const wordsLearned = () => { const pass = mapState().pass; return MAP.some(s => s.words && s.id in pass) || MAP.some(s => s.phase > 1 && s.id in pass); };
+const newLetters = () => { if (Run) return LETTERS.filter(x => Run.letters.includes(x.L)); const L = learnedABC(); return LETTERS.filter(x => x.lvl === state.level && L.includes(x.L)); };
+const knownABC = () => { if (Run) return Run.known; const L = learnedABC(); return LETTERS.filter(x => x.lvl <= state.level && L.includes(x.L)).map(x => x.L); };
 const findLetter = L => LETTERS.find(x => x.L === L.toUpperCase());
-const levelWords = d => Run ? fitWords(Run).filter(w => d == null || w.d === d) : WORDS.filter(w => w.L === state.level && (d == null || w.d === d));
+const levelWords = d => {
+  if (Run) return fitWords(Run).filter(w => d == null || w.d === d);
+  // the words of this level made of learned letters; only if there are too few, easier words fill in
+  const ws = fitWords({ known: knownABC() }).filter(w => d == null || w.d === d), exact = ws.filter(w => w.L === state.level);
+  return exact.length >= 6 ? exact : ws.filter(w => w.L <= state.level);
+};
 const findWord = s => WORDS.find(w => w.w === s && w.L === state.level) || WORDS.find(w => w.w === s);
 // words made only of letters the child already met on the map (+ only one word level, if the station says so)
 function fitWords(st) {
@@ -1497,6 +1537,14 @@ function Intro(then) {
   show();
 }
 // the child's home: almost empty. The map first, everything else one tap away.
+function shopTile(mm) {
+  if (!SHOP_ON) return null;
+  const open = Shop.open(mm);
+  return h('button', { class: 'home-tile' + (open ? '' : ' locked'), onclick: () => ShopScreen() },
+    open && !store.get('shopSeen', false) ? h('span', { class: 'new' }, 'חדש!') : null,
+    h('span', { class: 'ic' }, '🛍️'), h('b', null, 'החנות'),
+    h('small', null, open ? `🪙 ${Shop.coins()} מטבעות` : '🔒 נפתחת בתחנה 20'));
+}
 function resumeButton() {
   const r = Resume.get();
   return r && RESUME_RUN[r.stage] ? h('button', { class: 'resume', onclick: () => {
@@ -1520,7 +1568,7 @@ function Home() {
   const p = me();
   const n = streak();
   const meBar = h('button', { class: 'me-bar', onclick: () => MyArea(), 'aria-label': 'האזור שלי' },
-    h('span', { class: 'av' }, p.avatar),
+    h('span', { class: 'av' }, avatarEl()),
     h('span', { class: 'mid' }, h('b', null, `שלום, ${p.name}!`), ...goalBar()),
     h('span', { class: 'fire' }, h('em', null, n ? '🔥' : '📒'), n ? `${n} ימים` : 'האזור שלי'));
 
@@ -1536,12 +1584,14 @@ function Home() {
       h('small', null, open ? `${open} נושאים פתוחים` : 'נפתח אחרי התחנה הראשונה')),
     h('button', { class: 'home-tile', onclick: () => LeaderBoard() }, h('span', { class: 'ic' }, '🏆'), h('b', null, 'טבלת האלופים'),
       h('small', null, `⭐ ${mapStars(mm)} במפה`)),
-    h('button', { class: 'home-tile wide', onclick: () => KidSettings() }, h('span', { class: 'ic' }, '⚙️'),
-      h('span', null, h('b', null, 'ההגדרות שלי'), h('small', { style: 'display:block' }, 'שעון, נקודות וקול'))));
+    shopTile(mm),
+    h('button', { class: 'home-tile', onclick: () => KidSettings() }, h('span', { class: 'ic' }, '⚙️'),
+      h('b', null, 'ההגדרות שלי'), h('small', null, 'שעון, נקודות וקול')));
 
   app.append(h('div', { class: 'kid-home' }, meBar, mapBtn, ...(resumeBtn ? [resumeBtn] : []), tiles,
     h('div', { class: 'row' },
       h('button', { class: 'link-btn', onclick: () => Intro(() => Home()) }, '❓ איך משחקים'),
+      h('button', { class: 'link-btn', onclick: () => ProfilePicker() }, '👥 החלפת שחקן 🔒'),
       h('button', { class: 'link-btn', onclick: () => ParentArea() }, '👪 להורים 🔒'))));
   enter(mapBtn);
 }
@@ -1576,9 +1626,9 @@ function Practice() {
   const levels = h('div', { class: 'levels', role: 'group', 'aria-label': 'רמה' }, LEVELS.filter(l => levelOpen(l.n)).map(l => {
     const doneCount = open.filter(s => state.done[`${l.n}:${s.key}`]).length;
     return h('button', { class: l.n === state.level ? 'on' : '', onclick: () => setLevel(l.n) },
-      `רמה ${l.n}`, h('small', null, en(rangeOf(l))), h('em', null, doneCount ? `✅ ${doneCount}/${open.length}` : ' '));
+      `רמה ${l.n}`, h('small', null, en((L => L.length ? fmt(L[0]) + '–' + fmt(L[L.length - 1]) : rangeOf(l))(LETTERS.filter(x => x.lvl === l.n && learnedABC().includes(x.L)).map(x => x.L)))), h('em', null, doneCount ? `✅ ${doneCount}/${open.length}` : ' '));
   }));
-  const letters = h('div', { class: 'level-letters en' }, lv.letters.split('').join(' '));
+  const letters = h('div', { class: 'level-letters en' }, newLetters().map(x => fmt(x.L)).join(' '));
   const weakN = Mastery.weakCount();
   const review = weakN ? h('button', { class: 'stage review-card', onclick: () => { if (canPlay()) StageReview(); } },
     h('span', { class: 'num' }, '🔁'),
@@ -1589,13 +1639,132 @@ function Practice() {
     const isDone = !!state.done[lk(s.key)];
     return h('button', { class: 'stage', onclick: () => { if (canPlay()) s.run(); } },
       h('span', { class: 'num' }, s.icon),
-      h('span', { class: 'txt' }, h('b', null, `${i + 1}. ${s.name}`), h('span', null, s.desc)),
+      h('span', { class: 'txt' }, h('b', null, `${i + 1}. ${s.name}`), h('span', null, s.key === 'write' && !wordsLearned() ? 'כותבים אותיות באצבע' : s.desc)),
       h('span', { class: 'got' }, isDone ? h('span', { class: 'ok' }, '✅') : null, '⭐ ' + got));
   }));
   const locked = STAGES.length - open.length;
   app.append(...[hello, resumeButton(), levels, letters, review, list,
     locked ? h('p', { class: 'sub', style: 'margin-top:14px' }, (locked === 1 ? `🔒 עוד נושא אחד ייפתח כאן כשתגיע${g('', 'י')} אליו במפה.` : `🔒 עוד ${locked} נושאים ייפתחו כאן כשתגיע${g('', 'י')} אליהם במפה.`)) : null].filter(Boolean));
   enter(list);
+}
+/* =========================================================
+   The shop. Every star also gives a coin: coins are spent, stars never go down (so the leaderboard does not drop).
+   coins = all stars ever earned - what was spent. Opens when the child reaches map station 20.
+   Characters: 4 free, the rest are bought (a character a child already had before the shop counts as bought).
+   Clothes and extras are worn on the character: one on the head, one on the face, one around the neck.
+   Saved per child in "shop" = { spent, owned: [characters and item ids], wear: { head, face, neck } }.
+   ========================================================= */
+// the shop is built but stays hidden until the new characters are ready (it would sell characters that are about to change)
+const SHOP_ON = false;
+const SHOP_AT = 19;   // station 20 (0-based)
+const FREE_AVATARS = ['🦁', '🐼', '🦄', '🐸'];
+const AV_PRICE = { '🐯': 40, '🦊': 40, '🐵': 50, '🐧': 50, '🐝': 60, '🐬': 60, '🐙': 70, '🦖': 80 };
+const WEAR = [
+  { id: 'cap', e: '🧢', name: 'כובע', slot: 'head', price: 20 },
+  { id: 'bow', e: '🎀', name: 'סרט', slot: 'head', price: 20 },
+  { id: 'tophat', e: '🎩', name: 'כובע קוסם', slot: 'head', price: 35 },
+  { id: 'grad', e: '🎓', name: 'כובע סיום', slot: 'head', price: 45 },
+  { id: 'crown', e: '👑', name: 'כתר', slot: 'head', price: 70 },
+  { id: 'glasses', e: '👓', name: 'משקפיים', slot: 'face', price: 25 },
+  { id: 'sun', e: '🕶️', name: 'משקפי שמש', slot: 'face', price: 30 },
+  { id: 'scarf', e: '🧣', name: 'צעיף', slot: 'neck', price: 25 },
+  { id: 'medal', e: '🏅', name: 'מדליה', slot: 'neck', price: 50 },
+];
+const Shop = {
+  get(id = PID) { const d = RAW.get(`p${id}_shop`, null) || {}; return { spent: d.spent || 0, owned: d.owned || [], wear: d.wear || {} }; },
+  save(d) { store.set('shop', d); },
+  coins() { return Math.max(0, state.stars - this.get().spent); },
+  open(m = mapState()) { return SHOP_ON && m.at >= SHOP_AT; },
+  // free, bought, or the character the child already had
+  hasAvatar(av, id = PID) { const p = Profiles.get(id); return FREE_AVATARS.includes(av) || this.get(id).owned.includes(av) || !!(p && p.avatar === av); },
+  buy(key, price) {
+    const d = this.get();
+    if (d.owned.includes(key) || this.coins() < price) return false;
+    d.spent += price; d.owned.push(key); this.save(d); return true;
+  },
+  // switching character: the old one stays owned (it was the child's before)
+  choose(av) {
+    const p = me(), d = this.get();
+    if (!this.hasAvatar(av)) return;
+    if (!FREE_AVATARS.includes(p.avatar) && !d.owned.includes(p.avatar)) { d.owned.push(p.avatar); this.save(d); }
+    Profiles.update(PID, { avatar: av });
+  },
+  wear(it) {
+    const d = this.get();
+    if (!d.owned.includes(it.id)) return;
+    d.wear = { ...d.wear, [it.slot]: d.wear[it.slot] === it.id ? undefined : it.id };
+    if (!d.wear[it.slot]) delete d.wear[it.slot];
+    this.save(d);
+  },
+};
+// the character with what it wears (any child)
+function avatarEl(id = PID) {
+  const p = Profiles.get(id), w = Shop.get(id).wear;
+  return h('span', { class: 'avw' }, h('span', { class: 'w-a' }, p ? p.avatar : '🙂'),
+    ...['head', 'face', 'neck'].filter(sl => w[sl] && WEAR.some(x => x.id === w[sl])).map(sl => h('span', { class: 'w-' + sl, 'aria-hidden': 'true' }, WEAR.find(x => x.id === w[sl]).e)));
+}
+let shopTab = 'chars';
+function ShopScreen(tab) {
+  if (!PID) return ProfilePicker();
+  if (!SHOP_ON) return Home();
+  endRun();
+  Lock.open = false;
+  const app = screen('החנות'); menu = 'home';
+  const m = mapState();
+  if (!Shop.open(m)) {
+    const left = SHOP_AT - m.at;
+    app.append(h('div', { class: 'end shop-lock' }, h('div', { class: 'big' }, '🛍️'),
+      h('h2', null, '🔒 החנות נפתחת בתחנה 20'),
+      h('div', { class: 'shop-bar' }, h('i', { style: `width:${Math.round(m.at / SHOP_AT * 100)}%` })),
+      h('p', { class: 'sub' }, left === 1 ? 'עוד תחנה אחת במפה!' : `עוד ${left} תחנות במפה.`),
+      h('p', { class: 'sub' }, 'בחנות קונים דמויות, כובעים, משקפיים ועוד, במטבעות 🪙 שמרוויחים על כל כוכב.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn green', onclick: () => MapScreen() }, '🗺️ למפה'))));
+    return;
+  }
+  if (tab) shopTab = tab;
+  if (!store.get('shopSeen', false)) store.set('shopSeen', true);
+  const p = me(), d = Shop.get(), coins = Shop.coins();
+  const preview = avatarEl();
+  const top = h('div', { class: 'card shop-top' }, preview,
+    h('div', null, h('div', { class: 'coins' }, `🪙 ${coins}`), h('b', null, 'מטבעות'),
+      h('p', null, 'כל כוכב נותן מטבע. כשקונים, הכוכבים והמקום בטבלה לא יורדים.')));
+  const tabs = h('div', { class: 'seg board-tabs', role: 'tablist' }, [['chars', '🐾 דמויות'], ['wear', '🎩 בגדים ותוספות']].map(([k, t]) =>
+    h('button', { class: k === shopTab ? 'on' : '', role: 'tab', 'aria-selected': String(k === shopTab), onclick: () => ShopScreen(k) }, t)));
+  const item = (e, name, owned, on, price, act) => h('button', {
+    class: 'shop-item' + (owned ? ' own' : '') + (on ? ' on' : '') + (!owned && coins < price ? ' far' : ''), type: 'button',
+    'aria-label': `${name || e}${on ? ', עליך עכשיו' : owned ? '' : `, ${price} מטבעות`}`, onclick: act },
+    h('span', { class: 'e' }, e), h('b', null, name), h('small', null, on ? '✅ עליי' : owned ? (shopTab === 'chars' ? 'לבחור' : 'ללבוש') : `🪙 ${price}`));
+  const grid = shopTab === 'chars'
+    ? h('div', { class: 'shop-grid' }, AVATARS.map(av => {
+      const owned = Shop.hasAvatar(av), on = p.avatar === av, price = AV_PRICE[av] || 0;
+      return item(av, '', owned, on, price, () => owned ? (Shop.choose(av), ShopScreen()) : buyAsk(av, 'את הדמות', av, price, () => Shop.choose(av)));
+    }))
+    : h('div', { class: 'shop-grid' }, WEAR.map(it => {
+      const owned = d.owned.includes(it.id), on = d.wear[it.slot] === it.id;
+      return item(it.e, it.name, owned, on, it.price, () => owned ? (Shop.wear(it), ShopScreen()) : buyAsk(it.id, it.name, it.e, it.price, () => Shop.wear(it)));
+    }));
+  app.append(top, tabs, grid,
+    h('p', { class: 'sub', style: 'margin-top:12px' }, shopTab === 'wear' ? 'לוחצים על משהו שכבר קנית כדי ללבוש או להוריד אותו.' : 'לוחצים על דמות שכבר יש לך כדי לעבור אליה.'));
+  enter(grid);
+}
+// "buy it?" on top of the shop. Not enough coins: how many more are needed
+function buyAsk(key, name, e, price, then) {
+  const m = $('#modal'), coins = Shop.coins(), close = () => { m.hidden = true; m.replaceChildren(); };
+  const big = h('span', { class: 'sticker' }, e);
+  const enough = coins >= price;
+  m.replaceChildren(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' }, big,
+    h('div', { class: 'prompt' }, enough ? `לקנות ${name}?` : `חסרים עוד ${price - coins} מטבעות`),
+    h('p', { class: 'sub' }, enough ? `המחיר: ${price} 🪙. יש לך ${coins}, ויישארו ${coins - price}.` : 'כל כוכב במפה או בתרגול נותן מטבע. עוד קצת תרגול 💪'),
+    h('div', { class: 'row' },
+      enough ? h('button', { class: 'btn green', onclick: () => {
+        if (!Shop.buy(key, price)) return close();
+        then(); close(); ShopScreen();
+        const pv = $('.shop-top .avw'); if (pv) { pop(pv); burst(pv, 18); }
+        toast(`🎉 קנית ${name.replace(/^את /, '')} ${e}!`);
+      } }, `🪙 לקנות`) : null,
+      h('button', { class: 'btn secondary', onclick: close }, enough ? 'לא עכשיו' : 'אוקיי'))));
+  m.hidden = false;
+  pop(big);
 }
 /* My settings (for the child): my learning clock, the parent's timer (only to look at), my points, the voice, big or small letters */
 function KidSettings() {
@@ -1627,8 +1796,9 @@ function KidSettings() {
       h('div', { class: 'stat' }, h('b', null, mapStars(mm)), h('span', null, '🗺️ במפה')),
       h('div', { class: 'stat' }, h('b', null, state.stickers.length), h('span', null, '🏷️ מדבקות'))),
     h('p', { class: 'ks-note' }, `🗺️ ${g('אתה', 'את')} בתחנה ${mm.at + 1}: ${stationTitle(stationAt(mm.at))}`),
+    SHOP_ON ? h('p', { class: 'ks-note' }, Shop.open(mm) ? `🪙 ${Shop.coins()} מטבעות לחנות` : '🛍️ החנות נפתחת בתחנה 20') : null,
     h('div', { class: 'row' }, h('button', { class: 'btn secondary small', onclick: () => MyArea() }, '📒 האזור שלי')));
-  app.append(...[h('div', { class: 'me-head' }, h('div', { class: 'av' }, p.avatar), h('h1', null, p.name)),
+  app.append(...[h('div', { class: 'me-head' }, h('div', { class: 'av' }, avatarEl()), h('h1', null, p.name)),
     clock, parent, points, voiceSettings()].filter(Boolean));
   enter(clock);
 }
@@ -1942,7 +2112,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = 'f74a9316', APP_BUILT = '17.11.2026 12:06';
+const APP_VERSION = '384e13ec', APP_BUILT = '17.11.2026 13:25';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -2482,7 +2652,7 @@ function ProfilePicker(editing) {
         if (editing) return ProfileForm(p.id, () => ProfilePicker(true));
         loadProfile(p.id); renderStars(); Start();
       } },
-        h('span', { class: 'av' }, p.avatar), h('span', { class: 'nm' }, p.name),
+        h('span', { class: 'av' }, avatarEl(p.id)), h('span', { class: 'nm' }, p.name),
         h('small', null, editing ? '✏️ עריכה' : `⭐ ${RAW.get(`p${p.id}_stars`, 0)}`))),
       editing ? null : h('button', { class: 'who-card add', onclick: () => parentOnly(() => ProfileForm()) }, h('span', { class: 'av' }, '➕'), 'ילד חדש')),
     h('div', { class: 'row', style: 'margin-top:14px' }, editing
@@ -2500,9 +2670,15 @@ function ProfileForm(id, back) {
   const app = screen(old ? 'עריכת פרופיל' : 'ילד חדש', Profiles.list().length > 0);
   let avatar = old ? old.avatar : AVATARS[0], gender = old ? old.g : 'm';
   const name = h('input', { class: 'text-in', type: 'text', maxlength: '14', autocomplete: 'off', placeholder: 'למשל: נועם', value: old ? old.name : '' });
+  // characters from the shop: only free ones, or ones this child already has
+  const canPick = a => !SHOP_ON || FREE_AVATARS.includes(a) || (!!old && Shop.hasAvatar(a, id));
   const avGrid = h('div', { class: 'pick-grid' }, AVATARS.map(a => {
-    const b = h('button', { type: 'button', class: a === avatar ? 'on' : '', 'aria-label': a }, a);
-    b.addEventListener('click', () => { avatar = a; [...avGrid.children].forEach(x => x.classList.toggle('on', x === b)); pop(b); });
+    const ok = canPick(a);
+    const b = h('button', { type: 'button', class: (a === avatar ? 'on' : '') + (ok ? '' : ' locked'), 'aria-label': ok ? a : a + ' נעול, קונים בחנות' }, a);
+    b.addEventListener('click', () => {
+      if (!ok) { toast('🔒 את הדמות הזו קונים בחנות, במטבעות. החנות נפתחת בתחנה 20.'); shake(b); return; }
+      avatar = a; [...avGrid.children].forEach(x => x.classList.toggle('on', x === b)); pop(b);
+    });
     return b;
   }));
   const seg = h('div', { class: 'seg' }, [['m', 'בן'], ['f', 'בת']].map(([v, t]) => {
@@ -2553,6 +2729,16 @@ const legend = () => h('div', { class: 'legend' },
   h('span', null, h('i', { style: 'background:var(--green)' }), 'יודע/ת'),
   h('span', null, h('i', { style: 'background:var(--orange)' }), 'עוד מתאמנים'),
   h('span', null, h('i', { style: 'background:var(--card);box-shadow:0 0 0 1px var(--line)' }), 'עוד לא נלמדה'));
+function myLook() {
+  const w = Shop.get().wear, open = Shop.open();
+  const on = ['head', 'face', 'neck'].map(sl => WEAR.find(x => x.id === w[sl])).filter(Boolean);
+  return h('div', { class: 'card my-look' },
+    h('b', null, '👕 הדמות שלי'),
+    h('p', { class: 'sub', style: 'margin:4px 0 8px' }, on.length ? g('לובש', 'לובשת') + ' עכשיו: ' +on.map(x => x.e + ' ' + x.name).join(', ') : open ? 'עוד אין בגדים. קונים אותם בחנות במטבעות 🪙' : 'בחנות אפשר יהיה לקנות בגדים ודמויות. היא נפתחת בתחנה 20.'),
+    h('div', { class: 'row' }, open
+      ? h('button', { class: 'btn small', onclick: () => ShopScreen(on.length ? 'wear' : 'chars') }, `🛍️ לחנות · 🪙 ${Shop.coins()}`)
+      : h('button', { class: 'btn secondary small', onclick: () => ShopScreen() }, '🔒 החנות')));
+}
 function MyArea() {
   Lock.open = false;
   const app = screen('האזור שלי'); menu = 'home';
@@ -2560,7 +2746,7 @@ function MyArea() {
   const album = h('div', { class: 'album' }, STICKERS.map(s => state.stickers.includes(s)
     ? h('span', null, s) : h('span', { class: 'locked' }, '?')));
   app.append(
-    h('div', { class: 'me-head' }, h('div', { class: 'av' }, p.avatar), h('h1', null, p.name)),
+    h('div', { class: 'me-head' }, h('div', { class: 'av' }, avatarEl()), h('h1', null, p.name)),
     h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('b', null, state.stars), h('span', null, '⭐ כוכבים')),
       h('div', { class: 'stat' }, h('b', null, streak()), h('span', null, '🔥 ימים ברצף')),
@@ -2570,10 +2756,9 @@ function MyArea() {
     h('p', { class: 'sub', style: 'text-align:right' }, `כל יום שמגיעים ליעד (${state.goal} דקות) מקבלים מדבקה חדשה.`),
     album,
     h('div', { class: 'sec-title' }, g('האותיות שאני יודע', 'האותיות שאני יודעת')),
-    letterGrid(), legend(),
-    h('div', { class: 'row' },
-      h('button', { class: 'btn secondary small', onclick: () => ProfileForm(PID) }, '✏️ עריכת הפרופיל 🔒'),
-      h('button', { class: 'btn secondary small', onclick: () => ProfilePicker() }, '👥 החלפת שחקן 🔒')));
+    letterGrid(), legend());
+  // the child's own character and what it wears (bought in the shop). Editing the profile is in the parents area
+  if (SHOP_ON) app.insertBefore(myLook(), app.children[1]);
   enter(album);
 }
 
@@ -3376,15 +3561,15 @@ function StageWrite() {
     h('div', { class: 'mode-list' },
       h('button', { class: 'stage', onclick: () => WriteLetters() },
         h('span', { class: 'num' }, '✏️'),
-        h('span', { class: 'txt' }, h('b', null, 'אות אחרי אות'), h('span', null, 'האותיות של הרמה: ', en(fmt(lv.letters[0])), ' עד ', en(fmt(lv.letters[lv.letters.length - 1]))))),
-      h('button', { class: 'stage', onclick: () => WriteWords() },
+        h('span', { class: 'txt' }, h('b', null, 'אות אחרי אות'), h('span', null, 'האותיות שלמדת: ', en(newLetters().map(x => fmt(x.L)).join(' '))))),
+      wordsLearned() ? h('button', { class: 'stage', onclick: () => WriteWords() },
         h('span', { class: 'num' }, '📝'),
-        h('span', { class: 'txt' }, h('b', null, 'מילה שלמה'), h('span', null, 'כותבים מילה, אות אחרי אות, משמאל לימין')))),
+        h('span', { class: 'txt' }, h('b', null, 'מילה שלמה'), h('span', null, 'כותבים מילה, אות אחרי אות, משמאל לימין'))) : null),
     h('div', { class: 'hint blue' }, '💡 מתחילים תמיד בנקודה ', h('b', null, '1'), ' וממשיכים לפי החץ. ' + g('לא בטוח? לחץ', 'לא בטוחה? לחצי') + ' "הראה לי".'));
 }
 
 function WriteLetters(res) {
-  const order = (Run ? Run.letters.join('') : curLevel().letters).split('').map(fmt);
+  const order = (Run ? Run.letters : newLetters().map(x => x.L)).map(fmt);
   let idx = 0, earned = 0;
   if (res && res.idx != null) { idx = res.idx; earned = res.earned; }
   function play() {
@@ -4382,14 +4567,21 @@ const MAP_BUILT = (() => {
     add({ ...base, kind: 'listen' });
     add({ ...base, kind: 'pairs', gone: 4, letters: [...letters, ...K.filter(x => !letters.includes(x)).slice(-4)] });
     add({ ...base, kind: 'write', rounds: 2 });
-    if (words >= 5) add({ ...base, kind: 'build' });
-    if (words >= 8) add({ ...base, kind: 'missing' });
-    if (words >= 12 && gi % 2) add({ ...base, kind: 'read', rounds: 6 });
+    // map v5: no words in the middle of learning letters (they come after the whole level, with their own lesson)
+    if (words >= 5) add({ ...base, kind: 'build', gone: 5 });
+    if (words >= 8) add({ ...base, kind: 'missing', gone: 5 });
+    if (words >= 12 && gi % 2) add({ ...base, kind: 'read', rounds: 6, gone: 5 });
     if (gi % 2) add({ ...base, kind: 'listen', letters: K.slice(-4), tag: 'חזרה', key: grp + '-rev', pct: Math.min(.9, z.pct + .05) });
     if (gi === 3 || gi === 7 || gi === 12) {   // end of a block of letters
       if (LEVELS[level - 1].mirror) add({ ...base, kind: 'mirror', gone: 4, tag: LEVELS[level - 1].mirror.join(' ') });
       const lv = ALL_ABC.filter(L => findLetter(L).lvl === level);
       add({ ...base, kind: 'listen', letters: lv, rounds: 10, pct: .9, quiz: true, tag: `${lv[0]}–${lv[lv.length - 1]}` });
+      // map v5: now the letters make words. First a lesson (letters -> word), then building, missing letter, reading
+      const wb = { ...base, v: 5, letters: [], key: 'lw' + level, tag: 'מילים' };
+      add({ ...wb, kind: 'learn', words: true, title: 'לומדים: מאותיות למילה' });
+      add({ ...wb, kind: 'build' });
+      add({ ...wb, kind: 'missing' });
+      add({ ...wb, kind: 'read', rounds: 6 });
       add({ ...base, kind: 'chest' });
       // map v4: the small letters of this level, right after its capitals
       const low = lv.map(L => L.toLowerCase()), range = `${low[0]}–${low[low.length - 1]}`, half = Math.ceil(lv.length / 2);
@@ -4474,7 +4666,7 @@ function normMap(m) {
   }
   const pass = { ...(m.pass || {}) };
   let last = -1; MAP.forEach((s, i) => { if (s.id in pass) last = i; });
-  MAP.forEach((s, i) => { if (s.v === 4 && i < last && !(s.id in pass)) pass[s.id] = 1; });
+  MAP.forEach((s, i) => { if (s.v >= 4 && i < last && !(s.id in pass)) pass[s.id] = 1; });
   // a lesson added later before a block the child already started counts as done (no going back to learn what was already practised)
   MAP.forEach((s, i) => { if (s.kind === 'learn' && !(s.id in pass) && MAP[i + 1] && MAP[i + 1].id in pass) pass[s.id] = 1; });
   return { v: 2, pass, at: firstOpen(pass), best: {} };
@@ -4567,8 +4759,40 @@ function openChest(i) {
 /* Lesson station: learn before practising. Card after card from the game's own content, no points and no wrong answers.
    Reaching the last card passes the station (1 star, so lessons do not count like practice on the leaderboard). */
 function lessonCards(s) {
+  if (s.phase === 1 && s.words) return wordsLesson(s);
   if (s.phase === 1) return s.letters.map(L => letterLesson(findLetter(L), caseOf(s)));
   return [];
+}
+// from letters to a word: a short opening, then three short words made only of letters the child knows
+function wordsLesson(s) {
+  const pool = fitWords({ known: s.known }), seen = new Set();
+  // simple things a child can picture first (bag, bed, cab...), never non-words like "abc"
+  const NICE = ['bag', 'bed', 'cab', 'egg', 'hat', 'cat', 'dog', 'pen', 'sun', 'box', 'cup', 'fox', 'pig', 'bus', 'map', 'hen', 'jam', 'leg', 'net', 'car', 'fan', 'bee', 'cow', 'owl', 'zoo'];
+  const rank = w => { const i = NICE.indexOf(w.w.toLowerCase()); return i < 0 ? 99 : i; };
+  const picks = pool.filter(w => w.w.length === 3 && !['abc', 'add', 'beg'].includes(w.w.toLowerCase()) && !seen.has(w.e) && seen.add(w.e))
+    .sort((a, b) => rank(a) - rank(b) || a.w.localeCompare(b.w)).slice(0, 3);
+  const cs = caseOf(s), show = t => cs === 'lower' ? t.toLowerCase() : t.toUpperCase();
+  const open = { say: () => {}, body: () => [
+    h('div', { class: 'intro-emoji' }, '🧩'),
+    h('h2', null, 'מאותיות למילה'),
+    h('p', null, `${g('למדת', 'למדת')} כבר את האותיות ${show(s.known[0])} עד ${show(s.known[s.known.length - 1])}. כשמחברים כמה אותיות אחת אחרי השנייה, הן הופכות למילה! ${g('בוא', 'בואי')} נראה איך.`),
+  ] };
+  const card = w => {
+    const W = show(w.w), letters = [...W];
+    return {
+      say: () => Speech.en(`${letters.join(', ')}. ${w.w}.`, .7),
+      body: () => [
+        h('div', { class: 'intro-emoji' }, w.e),
+        h('div', { class: 'wl-letters en', dir: 'ltr' }, letters.map(c => h('button', { class: 'wl-tile', type: 'button', 'aria-label': 'האות ' + c, onclick: e => { pop(e.currentTarget); Speech.en(c, .7); } }, c))),
+        h('div', { class: 'wl-arrow', 'aria-hidden': 'true' }, '⬇'),
+        h('div', { class: 'ls-words' }, h('button', { class: 'ls-word', type: 'button', onclick: e => { pop(e.currentTarget); Speech.en(w.w, .7); } },
+          h('span', { class: 'en w' }, W), h('span', { class: 'he' }, w.he))),
+        h('p', { class: 'prompt' }, ...bi(`האותיות ${letters.join(' ')} יחד הן המילה ${W}`)),
+        h('p', { class: 'sub' }, g('לחץ על כל אות, ואחר כך על המילה', 'לחצי על כל אות, ואחר כך על המילה')),
+      ],
+    };
+  };
+  return [open, ...picks.map(card)];
 }
 // one letter, its sound in Hebrew, and its two picture words (tap to hear).
 // capitals: only the capital. small letters: the capital the child already knows, and its small letter
@@ -4743,6 +4967,7 @@ function MapScreen() {
   const m = mapState(), at = m.at, kid = me();
   Lock.open = false;
   const app = screen('המפה'); menu = 'home';
+  if (Shop.open(m) && !store.get('shopSeen', false) && !store.get('shopToast', false)) { store.set('shopToast', true); setTimeout(() => toast('🛍️ החנות נפתחה! קונים בה דמויות ובגדים במטבעות. היא במסך הבית.', 6000), 600); }
   app.append(h('div', { class: 'map-head' }, h('b', null, `⭐ ${mapStars(m)} כוכבים במפה`),
     h('button', { class: 'btn small', onclick: () => LeaderBoard() }, '🏆 טבלה'), h('span', null, `תחנה ${at + 1}`)));
 
