@@ -379,6 +379,7 @@ canvas.trace{background:#fff;border-radius:20px;box-shadow:0 4px 0 var(--line);t
 .ls-letter{display:flex;align-items:baseline;justify-content:center;gap:18px;margin:0 auto 6px;border:0;background:var(--blue-soft);border-radius:24px;padding:6px 26px;box-shadow:0 4px 0 var(--line);direction:ltr}
 .ls-letter .en{font-size:96px;line-height:1.1;font-weight:800;color:var(--ink)}
 .ls-letter small{font-size:22px;align-self:center}
+.ls-letter .ls-cap{opacity:.45;font-size:62px}.ls-letter .ls-to{font-size:34px;color:var(--muted);align-self:center}
 .ls-snd{color:var(--orange);white-space:nowrap}
 .ls-words{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 12px}
 .ls-word{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:#fff;border-radius:20px;padding:12px 6px;box-shadow:0 4px 0 var(--line);min-height:44px}
@@ -737,7 +738,7 @@ const store = {
   set(k, v) { RAW.set(`p${PID}_${k}`, v); onKidChange(PID); },
   del(k) { RAW.del(`p${PID}_${k}`); onKidChange(PID); },
 };
-const PROFILE_KEYS = ['intro', 'stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits', 'spoken'];
+const PROFILE_KEYS = ['intro', 'wrote', 'stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits', 'spoken'];
 
 const state = {
   stars: 0, stageStars: {}, done: {}, caseMode: 'upper', level: 1,
@@ -757,6 +758,7 @@ const Profiles = {
   remove(id) {
     onKidRemoved(id);
     for (const k of PROFILE_KEYS) RAW.del(`p${id}_${k}`);
+    RAW.del(`p${id}_clk`);
     this.save(this.list().filter(p => p.id !== id));
     if (RAW.get('active', null) === id) RAW.del('active');
   },
@@ -895,15 +897,20 @@ const Activity = {
     checkGoal();
   },
 };
-/* The child's learning clock: seconds of learning in this sitting, for each child.
+/* The child's learning clock: how long the child learned today, to the second, for each child.
+   Kept on the phone (p<id>_clk = { day, sec }), so a refresh or closing the game does not reset it; a new day starts at 0.
+   It never shows less than the daily time saved in the account (time played on another phone counts too).
    It runs only while the game is on screen and someone touched it in the last minute (like the daily time). */
 const Clock = {
-  secs: {},
   active() { return !document.hidden && Date.now() - Activity.last <= 60000; },
-  sec() { return this.secs[PID] || 0; },
+  sec() {
+    if (!PID) return 0;
+    const c = RAW.get(`p${PID}_clk`, null);
+    return Math.max(c && c.day === dayKey() ? c.sec : 0, todaySec());
+  },
   init() { setInterval(() => this.tick(), 1000); this.render(); },
   tick() {
-    if (PID && this.active()) this.secs[PID] = this.sec() + 1;
+    if (PID && this.active()) RAW.set(`p${PID}_clk`, { day: dayKey(), sec: this.sec() + 1 });
     this.render();
   },
   render() {
@@ -911,7 +918,7 @@ const Clock = {
     el.hidden = !PID;
     if (!PID) return;
     el.textContent = '⏱️ ' + fmtClock(this.sec());
-    el.title = 'כמה זמן לומדים עכשיו';
+    el.title = 'כמה זמן למדת היום';
     el.classList.toggle('paused', !this.active());
   },
 };
@@ -1534,6 +1541,8 @@ const FREE_KINDS = { listen: ['listen'], pairs: ['pairs', 'mirror'], build: ['bu
 const freeOpen = key => { const pass = mapState().pass, kinds = FREE_KINDS[key] || [key]; return MAP.some(s => kinds.includes(s.kind) && s.id in pass); };
 const levelOpen = n => { const pass = mapState().pass; return MAP.some(s => s.level === n && s.phase === 1 && s.kind !== 'learn' && s.kind !== 'chest' && s.id in pass); };
 const topOpenLevel = () => [3, 2, 1].find(levelOpen) || 1;
+// small letters in practice only after the child met them on the map (the small-letters pairs of that level)
+const lowerOpen = n => { const pass = mapState().pass; return MAP.some(s => s.cs === 'lower' && s.kind === 'pairs' && s.level === n && s.id in pass); };
 function Practice() {
   if (!PID) return ProfilePicker();
   endRun();
@@ -1541,6 +1550,7 @@ function Practice() {
   Lock.open = false;
   const app = screen('חזרה ושינון'); menu = 'practice';
   if (!levelOpen(state.level)) { state.level = topOpenLevel(); store.set('level', state.level); }
+  state.caseMode = lowerOpen(state.level) ? 'lower' : 'upper';
   const lv = curLevel();
   const open = STAGES.filter(s => freeOpen(s.key));
   if (!open.length) {
@@ -1557,9 +1567,6 @@ function Practice() {
     return h('button', { class: l.n === state.level ? 'on' : '', onclick: () => setLevel(l.n) },
       `רמה ${l.n}`, h('small', null, en(rangeOf(l))), h('em', null, doneCount ? `✅ ${doneCount}/${open.length}` : ' '));
   }));
-  const toggle = h('div', { class: 'case-toggle', role: 'group', 'aria-label': 'סוג אותיות' },
-    h('button', { class: state.caseMode === 'upper' ? 'on' : '', onclick: () => setCase('upper') }, 'אותיות גדולות ', en('ABC')),
-    h('button', { class: state.caseMode === 'lower' ? 'on' : '', onclick: () => setCase('lower') }, 'אותיות קטנות ', en('abc')));
   const letters = h('div', { class: 'level-letters en' }, lv.letters.split('').join(' '));
   const weakN = Mastery.weakCount();
   const review = weakN ? h('button', { class: 'stage review-card', onclick: () => { if (canPlay()) StageReview(); } },
@@ -1575,7 +1582,7 @@ function Practice() {
       h('span', { class: 'got' }, isDone ? h('span', { class: 'ok' }, '✅') : null, '⭐ ' + got));
   }));
   const locked = STAGES.length - open.length;
-  app.append(...[hello, resumeButton(), levels, toggle, letters, review, list,
+  app.append(...[hello, resumeButton(), levels, letters, review, list,
     locked ? h('p', { class: 'sub', style: 'margin-top:14px' }, (locked === 1 ? `🔒 עוד נושא אחד ייפתח כאן כשתגיע${g('', 'י')} אליו במפה.` : `🔒 עוד ${locked} נושאים ייפתחו כאן כשתגיע${g('', 'י')} אליהם במפה.`)) : null].filter(Boolean));
   enter(list);
 }
@@ -1590,8 +1597,7 @@ function KidSettings() {
   const left = h('div', { class: 'ks-big' });
   const draw = () => {
     now.textContent = fmtClock(Clock.sec());
-    const min = Math.floor(todaySec() / 60);
-    today.textContent = `היום בסך הכול: ${min} ${min === 1 ? 'דקה' : 'דקות'} · היעד: ${state.goal} דקות`;
+    today.textContent = Clock.sec() >= state.goal * 60 ? `🎯 הגעת ליעד של היום (${state.goal} דקות)!` : `🎯 היעד של היום: ${state.goal} דקות`;
     pause.textContent = Clock.active() ? '' : `⏸️ השעון עוצר כשלא נוגעים במסך. ${g('גע', 'געי')} כדי להמשיך.`;
     if (state.timerMin) left.textContent = fmtClock(Math.max(0, PlayTimer.left()));
     PlayTimer.render(); Clock.render();
@@ -1600,7 +1606,7 @@ function KidSettings() {
   const iv = setInterval(draw, 1000);
   cleanup = () => clearInterval(iv);
   const clock = h('div', { class: 'card ks-card' }, h('b', null, '⏱️ השעון שלי'),
-    h('p', { class: 'ks-note' }, 'כמה זמן ' + g('אתה לומד', 'את לומדת') + ' עכשיו'), now, today, pause);
+    h('p', { class: 'ks-note' }, 'כמה זמן למדת היום'), now, today, pause);
   const parent = state.timerMin ? h('div', { class: 'card ks-card parent' }, h('b', null, '⏳ הזמן שההורים נתנו להיום'),
     h('p', { class: 'ks-note' }, PlayTimer.isOver() ? 'הזמן של היום נגמר' : 'כמה זמן נשאר לשחק היום'), left,
     h('p', { class: 'ks-note' }, `ההורים קבעו ${state.timerMin} דקות ביום. רק הם יכולים לשנות את זה.`)) : null;
@@ -1611,12 +1617,8 @@ function KidSettings() {
       h('div', { class: 'stat' }, h('b', null, state.stickers.length), h('span', null, '🏷️ מדבקות'))),
     h('p', { class: 'ks-note' }, `🗺️ ${g('אתה', 'את')} בתחנה ${mm.at + 1}: ${stationTitle(stationAt(mm.at))}`),
     h('div', { class: 'row' }, h('button', { class: 'btn secondary small', onclick: () => MyArea() }, '📒 האזור שלי')));
-  const toggle = h('div', { class: 'case-toggle', role: 'group', 'aria-label': 'סוג אותיות' },
-    h('button', { class: state.caseMode === 'upper' ? 'on' : '', onclick: () => { state.caseMode = 'upper'; store.set('case', 'upper'); KidSettings(); } }, 'אותיות גדולות ', en('ABC')),
-    h('button', { class: state.caseMode === 'lower' ? 'on' : '', onclick: () => { state.caseMode = 'lower'; store.set('case', 'lower'); KidSettings(); } }, 'אותיות קטנות ', en('abc')));
   app.append(...[h('div', { class: 'me-head' }, h('div', { class: 'av' }, p.avatar), h('h1', null, p.name)),
-    clock, parent, points, voiceSettings(),
-    h('div', { class: 'card ks-card' }, h('b', null, '🔤 איך לראות את האותיות'), h('div', { style: 'margin-top:8px' }, toggle))].filter(Boolean));
+    clock, parent, points, voiceSettings()].filter(Boolean));
   enter(clock);
 }
 function setCase(m) { state.caseMode = m; store.set('case', m); Practice(); }
@@ -2700,7 +2702,8 @@ function StageListen(res) {
     const item = findLetter(order[round][0]);
     const kw = item.kws[order[round][1]] || item.kws[0];
     const atEnd = !!kw.end;
-    const lower = round >= Math.floor(ROUNDS / 2);
+    // the map decides the case (capitals first, small letters after their own lesson), never both in one round set
+    const lower = state.caseMode === 'lower';
     const show = L => lower ? L.toLowerCase() : L;
     // on the map the number of answers grows with the child's knowledge
     const others = Run ? shuffle(Run.known.filter(x => x !== item.L)).slice(0, Run.opts - 1)
@@ -3154,11 +3157,17 @@ function resample(pts, step = 2.5) {
   return out;
 }
 
+/* Writing a letter the right way: stroke after stroke in the numbered order, each one from its start point
+   and along its arrow. Every finger stroke is checked when the finger lifts: a wrong start, a wrong direction,
+   the wrong stroke or leaving the line is erased with a short tip; the finger may lift in the middle of a stroke
+   and go on from the same place. A letter the child never wrote before opens with the "show me" demo. */
 function makeTracer(letter, { onSuccess, onMsg }) {
   const strokes = STROKES[letter].map(s => resample(s));
-  const samples = strokes.flat();
   const ink = [];
-  let drawing = false, done = false, missing = null, demo = null, rafId = 0;
+  let drawing = false, done = false, missing = null, demo = null, rafId = 0, locked = false;
+  let cur = 0, prog = 0;   // the stroke being written now, and how far along it the child already got (point index)
+  const wrote = () => (PID ? store.get('wrote', []) : []);
+  const isNew = !!PID && !wrote().includes(letter);
 
   const maxByHeight = Math.max(200, (window.innerHeight - 340) / 1.2);
   const cssW = Math.round(Math.min(300, document.querySelector('main').clientWidth - 32, maxByHeight));
@@ -3184,9 +3193,13 @@ function makeTracer(letter, { onSuccess, onMsg }) {
     ctx.strokeStyle = done ? '#7FD3A6' : '#B4BED0'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
     strokes.forEach(s => { path(s); ctx.stroke(); });
     ctx.setLineDash([]);
+    // the child's ink under the numbers, so the next start point is never hidden
+    ctx.strokeStyle = done ? '#22A86A' : '#2F6FED'; ctx.lineWidth = 6;
+    ink.forEach(s => { if (s.length === 1) { ctx.beginPath(); ctx.arc(s[0][0], s[0][1], 3, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill(); } else { path(s); ctx.stroke(); } });
     if (!done) {
       const placed = [];
       strokes.forEach((s, i) => {
+        if (i < cur) return;   // already written
         if (s.length >= 6) {
           const fi = Math.min(s.length - 2, Math.max(3, Math.floor(s.length * .45)));
           const [ax, ay] = s[fi], [bx, by] = s[fi + 1];
@@ -3198,14 +3211,13 @@ function makeTracer(letter, { onSuccess, onMsg }) {
         let [mx, my] = s[0];
         if (placed.some(([px, py]) => Math.hypot(px - mx, py - my) < 8)) { const q = s[Math.min(s.length - 1, 4)]; [mx, my] = q; }
         placed.push([mx, my]);
-        ctx.fillStyle = '#FF8A3D'; ctx.beginPath(); ctx.arc(mx, my, 4.6, 0, Math.PI * 2); ctx.fill();
+        if (i === cur && !demo) { ctx.strokeStyle = 'rgba(255,138,61,.35)'; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(mx, my, 7.2, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.fillStyle = i === cur ? '#FF8A3D' : '#FFC49E'; ctx.beginPath(); ctx.arc(mx, my, 4.6, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.font = 'bold 6px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(String(i + 1), mx, my + .3);
       });
     }
     if (missing && !done) { ctx.fillStyle = 'rgba(255,138,61,.75)'; missing.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill(); }); }
-    ctx.strokeStyle = done ? '#22A86A' : '#2F6FED'; ctx.lineWidth = 6;
-    ink.forEach(s => { if (s.length === 1) { ctx.beginPath(); ctx.arc(s[0][0], s[0][1], 3, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill(); } else { path(s); ctx.stroke(); } });
     if (demo) {
       ctx.strokeStyle = 'rgba(255,138,61,.9)'; ctx.lineWidth = 5;
       for (let i = 0; i < demo.si; i++) { path(strokes[i]); ctx.stroke(); }
@@ -3218,7 +3230,7 @@ function makeTracer(letter, { onSuccess, onMsg }) {
 
   const toUnits = e => { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 100, (e.clientY - r.top) / r.height * 120]; };
   canvas.addEventListener('pointerdown', e => {
-    if (done) return; e.preventDefault(); stopDemo();
+    if (done || locked) return; e.preventDefault(); stopDemo();
     try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
     drawing = true; missing = null; ink.push([toUnits(e)]); render();
   });
@@ -3229,34 +3241,87 @@ function makeTracer(letter, { onSuccess, onMsg }) {
     const n = Math.ceil(d / 2); for (let i = 1; i <= n; i++) s.push([last[0] + (p[0] - last[0]) * i / n, last[1] + (p[1] - last[1]) * i / n]);
     render();
   });
-  const end = () => { if (!drawing) return; drawing = false; check(false); };
+  const end = () => { if (!drawing) return; drawing = false; judgeLast(); };
   canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('pointerleave', end);
 
-  // every stroke must be mostly covered (so a missing dot or bar is caught), and ink must stay near the letter
-  function evaluate() {
-    const pts = ink.flat();
-    if (pts.length < 1) return { cov: 0, minStroke: 0, prec: 0, miss: samples };
-    const T2 = 9 * 9, P2 = 12 * 12; let covered = 0, inside = 0, minStroke = 1; const miss = [];
-    for (const s of strokes) {
-      let c = 0;
-      for (const [sx, sy] of s) { let ok = false; for (const [x, y] of pts) { const dx = sx - x, dy = sy - y; if (dx * dx + dy * dy <= T2) { ok = true; break; } } if (ok) c++; else miss.push([sx, sy]); }
-      covered += c; minStroke = Math.min(minStroke, c / s.length);
+  const R = 11;   // how far from the grey line still counts as on it
+  function nearest(s, p, lo, hi) {
+    let bi = -1, bd = Infinity;
+    for (let i = Math.max(0, lo); i <= Math.min(s.length - 1, hi); i++) { const d = (s[i][0] - p[0]) ** 2 + (s[i][1] - p[1]) ** 2; if (d < bd) { bd = d; bi = i; } }
+    return [bi, Math.sqrt(bd)];
+  }
+  // one finger stroke against the stroke that should be written now. null = fine, or what went wrong
+  function judge(seg) {
+    const s = strokes[cur];
+    if (s.length <= 3) {   // a dot: touching it is enough
+      if (seg.some(p => nearest(s, p, 0, s.length - 1)[1] <= R)) { prog = s.length - 1; return null; }
+      return strokes.some((o, j) => j > cur && seg.some(p => nearest(o, p, 0, o.length - 1)[1] <= R)) ? 'order' : 'start';
     }
-    for (const [x, y] of pts) { for (const [sx, sy] of samples) { const dx = sx - x, dy = sy - y; if (dx * dx + dy * dy <= P2) { inside++; break; } } }
-    return { cov: covered / samples.length, minStroke, prec: inside / pts.length, miss };
+    if (nearest(s, seg[0], prog - 6, prog + 8)[1] > R) {
+      if (prog > 0) return 'continue';
+      return strokes.some((o, j) => j > cur && nearest(o, seg[0], 0, 8)[1] <= R) && nearest(s, seg[0], 0, s.length - 1)[1] > R ? 'order' : 'start';
+    }
+    let at = Math.max(0, nearest(s, seg[0], prog - 6, prog + 8)[0]), good = 0, back = 0, other = 0, off = 0;
+    for (const p of seg) {
+      const [bi, bd] = nearest(s, p, at - 8, at + 20);
+      if (bd <= R) { good++; if (bi > at) at = bi; continue; }
+      if (nearest(s, p, 0, s.length - 1)[1] <= R) back++;
+      else if (strokes.some((o, j) => j !== cur && nearest(o, p, 0, o.length - 1)[1] <= R)) other++;
+      else off++;
+    }
+    if (good / seg.length >= .8) { prog = Math.max(prog, at); return null; }
+    return other >= back && other >= off ? 'order' : back >= off ? 'direction' : 'off';
   }
-  function check(manual) {
+  const TIPS = {
+    start: () => `מתחילים בנקודה ${cur + 1} 🟠 ${g('נסה', 'נסי')} שוב`,
+    continue: () => g('ממשיך', 'ממשיכה') + ' מהמקום שבו עצרת, עד סוף הקו',
+    order: () => `קודם קו מספר ${cur + 1}. מתחילים בנקודה ${cur + 1} 🟠`,
+    direction: () => 'הכיוון הפוך 🙂 כותבים לפי החץ',
+    off: () => 'יצאת מהקו האפור. ' + g('נסה', 'נסי') + ' שוב לאורך הקו',
+  };
+  function judgeLast() {
     if (done) return;
-    const r = evaluate();
-    const coveredEnough = r.cov >= .85 && r.minStroke >= .75;
-    if (coveredEnough && r.prec >= .8) { done = true; missing = null; render(); onSuccess && onSuccess(canvas); return; }
-    if (coveredEnough) { onMsg && onMsg('יצאת קצת מהקו האפור. ' + g('לחץ', 'לחצי') + ' "נקה" ' + g('ונסה', 'ונסי') + ' שוב 🙂'); return; }
-    if (manual) { missing = r.miss; render(); onMsg && onMsg(ink.length ? 'כמעט! ' + g('עבור', 'עברי') + ' גם על הנקודות הכתומות 🙂' : START_MSG()); }
+    const seg = ink[ink.length - 1];
+    if (!seg) return;
+    const s = strokes[cur];
+    if (seg.length < 3 && s.length > 3) {   // a tiny tap, not a stroke. On a dot that comes later: say so
+      ink.pop(); render();
+      if (strokes.some((o, j) => j > cur && o.length <= 3 && nearest(o, seg[0], 0, o.length - 1)[1] <= R)) { shake(canvas); onMsg && onMsg(TIPS.order()); }
+      return;
+    }
+    const bad = judge(seg);
+    if (bad) {
+      ink.pop(); render(); shake(canvas);
+      onMsg && onMsg(TIPS[bad]());
+      return;
+    }
+    if (prog >= s.length - 4) {   // this stroke is done: on to the next one
+      cur++; prog = 0;
+      if (cur >= strokes.length) {
+        done = true; missing = null; render();
+        if (PID && !wrote().includes(letter)) store.set('wrote', [...wrote(), letter]);
+        onSuccess && onSuccess(canvas);
+        return;
+      }
+      render();
+      onMsg && onMsg(`יפה! עכשיו קו מספר ${cur + 1}: מתחילים בנקודה ${cur + 1} 🟠`);
+      return;
+    }
+    render();
+    onMsg && onMsg(g('ממשיך', 'ממשיכה') + ' עד סוף הקו 👉');
   }
-  function clear() { if (done) return; ink.length = 0; missing = null; render(); }
-  function stopDemo() { if (rafId) cancelAnimationFrame(rafId); rafId = 0; demo = null; }
-  function showDemo() {
-    if (done) return; stopDemo(); ink.length = 0; missing = null;
+  // "check": says what comes next and marks the rest of the stroke
+  function check() {
+    if (done) return;
+    missing = strokes[cur].slice(prog); render();
+    onMsg && onMsg(cur === 0 && prog === 0 ? START_MSG() : `עכשיו קו מספר ${cur + 1}. ${g('עבור', 'עברי')} על הנקודות הכתומות לפי החץ 🙂`);
+  }
+  function clear() { if (done) return; ink.length = 0; missing = null; cur = 0; prog = 0; render(); onMsg && onMsg(START_MSG()); }
+  function stopDemo() { if (rafId) cancelAnimationFrame(rafId); rafId = 0; demo = null; if (locked) { locked = false; canvas.classList.remove('locked'); } }
+  // first = the first time this letter shows up: the child watches first, the board waits
+  function showDemo(first) {
+    if (done) return; stopDemo(); ink.length = 0; missing = null; cur = 0; prog = 0;
+    if (first) { locked = true; canvas.classList.add('locked'); onMsg && onMsg(`👀 ${g('תסתכל', 'תסתכלי')} איך כותבים ${letter}: קו אחרי קו, לפי המספרים`); }
     demo = { si: 0, pi: 0 }; let last = performance.now(), pause = 0;
     const SPEED = 26;
     const step = now => {
@@ -3267,12 +3332,20 @@ function makeTracer(letter, { onSuccess, onMsg }) {
       }
       render();
       if (demo.si < strokes.length) rafId = requestAnimationFrame(step);
-      else { rafId = 0; setTimeout(() => { if (!rafId) { demo = null; render(); } }, 700); }
+      else {
+        rafId = 0;
+        setTimeout(() => {
+          if (rafId) return;
+          demo = null; render();
+          if (locked) { locked = false; canvas.classList.remove('locked'); onMsg && onMsg(`עכשיו ${g('תורך', 'תורך')}! ` + START_MSG()); }
+        }, 700);
+      }
     };
     rafId = requestAnimationFrame(step);
   }
   render();
-  return { el: canvas, clear, showDemo, check: () => check(true), destroy: stopDemo };
+  if (isNew) setTimeout(() => { if (canvas.isConnected && !done && !ink.length) showDemo(true); }, 600);
+  return { el: canvas, clear, showDemo: () => { if (!locked) showDemo(); }, check, destroy: () => { stopDemo(); locked = false; } };
 }
 
 function traceTools(tr) {
@@ -3288,7 +3361,7 @@ function StageWrite() {
   const lv = curLevel();
   app.append(
     h('div', { class: 'prompt' }, 'מה כותבים היום?'),
-    h('p', { class: 'sub' }, `כותבים באותיות ${kind} (אפשר לשנות בתפריט הראשי).`),
+    h('p', { class: 'sub' }, `כותבים באותיות ${kind}.`),
     h('div', { class: 'mode-list' },
       h('button', { class: 'stage', onclick: () => WriteLetters() },
         h('span', { class: 'num' }, '✏️'),
@@ -4271,7 +4344,11 @@ const ENDLESS_PHASE = 6;
 const ALL_ABC = MAP_GROUPS.join('').split('');
 // easy at the start, harder as the child knows more: more answers to choose from, more points needed
 const zoneOf = gi => gi < 2 ? { opts: 3, pct: .6 } : gi < 8 ? { opts: 4, pct: .75 } : { opts: 5, pct: .85 };
-const MAP = (() => {
+/* Capitals first, small letters after every level (map v4): the letter blocks of a level teach only capitals;
+   then a block of the same letters in small letters (lesson, capital-to-small pairs, listening, writing,
+   mirror letters, quiz). From the words phase on, everything is in small letters, like real English.
+   Stations that were retired stay in MAP_BUILT with "gone", so old saved progress (map v1) still maps by index. */
+const MAP_BUILT = (() => {
   const out = [], seen = {};
   // every station has a stable id = its key + kind, so new stations can be added anywhere without moving a child's stars.
   // An id must never change once shipped: it does not include the phase number (that is only for display) or the order.
@@ -4292,17 +4369,28 @@ const MAP = (() => {
     // map v3: every block starts with a lesson (learn first, then practise). v: 3 keeps it out of MAP_V1.
     add({ ...base, kind: 'learn', v: 3, title: 'לומדים: ' + letters.join(' ') });
     add({ ...base, kind: 'listen' });
-    add({ ...base, kind: 'pairs', letters: [...letters, ...K.filter(x => !letters.includes(x)).slice(-4)] });
+    add({ ...base, kind: 'pairs', gone: 4, letters: [...letters, ...K.filter(x => !letters.includes(x)).slice(-4)] });
     add({ ...base, kind: 'write', rounds: 2 });
     if (words >= 5) add({ ...base, kind: 'build' });
     if (words >= 8) add({ ...base, kind: 'missing' });
     if (words >= 12 && gi % 2) add({ ...base, kind: 'read', rounds: 6 });
     if (gi % 2) add({ ...base, kind: 'listen', letters: K.slice(-4), tag: 'חזרה', key: grp + '-rev', pct: Math.min(.9, z.pct + .05) });
     if (gi === 3 || gi === 7 || gi === 12) {   // end of a block of letters
-      if (LEVELS[level - 1].mirror) add({ ...base, kind: 'mirror', tag: LEVELS[level - 1].mirror.join(' ') });
+      if (LEVELS[level - 1].mirror) add({ ...base, kind: 'mirror', gone: 4, tag: LEVELS[level - 1].mirror.join(' ') });
       const lv = ALL_ABC.filter(L => findLetter(L).lvl === level);
       add({ ...base, kind: 'listen', letters: lv, rounds: 10, pct: .9, quiz: true, tag: `${lv[0]}–${lv[lv.length - 1]}` });
       add({ ...base, kind: 'chest' });
+      // map v4: the small letters of this level, right after its capitals
+      const low = lv.map(L => L.toLowerCase()), range = `${low[0]}–${low[low.length - 1]}`, half = Math.ceil(lv.length / 2);
+      const lo = { ...base, v: 4, cs: 'lower', letters: lv, key: 'low' + level, tag: range, opts: Math.min(z.opts, lv.length) };
+      add({ ...lo, kind: 'learn', title: `לומדים: אותיות קטנות ${range}` });
+      add({ ...lo, kind: 'pairs', title: 'זוגות: אות גדולה ואות קטנה' });
+      add({ ...lo, kind: 'listen', title: 'מה שמעת? אותיות קטנות' });
+      add({ ...lo, kind: 'write', rounds: 2, letters: lv.slice(0, half), key: `low${level}-a`, title: `כותבים אותיות קטנות ${low[0]}–${low[half - 1]}` });
+      add({ ...lo, kind: 'write', rounds: 2, letters: lv.slice(half), key: `low${level}-b`, title: `כותבים אותיות קטנות ${low[half]}–${low[low.length - 1]}` });
+      if (LEVELS[level - 1].mirror) add({ ...lo, kind: 'mirror', tag: LEVELS[level - 1].mirror.join(' ') });
+      add({ ...lo, kind: 'listen', rounds: 10, pct: .9, quiz: true, title: '🏁 בוחן: אותיות קטנות' });
+      add({ ...lo, kind: 'chest' });
     }
   });
   [1, 2, 3].forEach(wl => {
@@ -4342,6 +4430,9 @@ const MAP = (() => {
   });
   return out;
 })();
+const MAP = MAP_BUILT.filter(s => !s.gone).map((s, i) => ({ ...s, i }));
+// the letter case of a station: capitals in the letters phase (unless it is a small-letters block), small letters after it
+const caseOf = s => s.cs || (s.phase === 1 ? 'upper' : 'lower');
 const ENDLESS = ['listen', 'build', 'frame', 'read', 'chat', 'missing', 'talk', 'wwrite', 'frame', 'listen', 'chat', 'build', 'talk', 'frame'];
 function stationAt(i) {
   if (i < MAP.length) return MAP[i];
@@ -4356,7 +4447,7 @@ const stationTitle = s => s.title || (s.quiz ? `🏁 בוחן: ${KIND[s.kind].na
 /* Map progress = { v: 2, pass: { stationId: stars } }. The station the child is on ("at") is the first
    one not passed yet, so a station added later in the middle of the path is simply the next one to play.
    The first map (v1) kept { at, best: { index: stars } }: it is moved to ids once, using the stations of map v1. */
-const MAP_V1 = MAP.filter(s => s.v === 1);
+const MAP_V1 = MAP_BUILT.filter(s => s.v === 1);
 const v1Id = i => i < MAP_V1.length ? MAP_V1[i].id : 'e:' + (i - MAP_V1.length);
 function stationIndex(id) {
   if (/^e:\d+$/.test(id)) return MAP.length + +id.slice(2);
@@ -4371,6 +4462,8 @@ function normMap(m) {
     m = { v: 2, pass };
   }
   const pass = { ...(m.pass || {}) };
+  let last = -1; MAP.forEach((s, i) => { if (s.id in pass) last = i; });
+  MAP.forEach((s, i) => { if (s.v === 4 && i < last && !(s.id in pass)) pass[s.id] = 1; });
   // a lesson added later before a block the child already started counts as done (no going back to learn what was already practised)
   MAP.forEach((s, i) => { if (s.kind === 'learn' && !(s.id in pass) && MAP[i + 1] && MAP[i + 1].id in pass) pass[s.id] = 1; });
   return { v: 2, pass, at: firstOpen(pass), best: {} };
@@ -4406,7 +4499,7 @@ function startStation(i) {
     const weak = ALL_ABC.filter(L => Mastery.isWeak('L:' + L));
     Run.letters = (weak.length ? shuffle(weak) : shuffle(ALL_ABC)).slice(0, 3);
   }
-  state.level = s.level;
+  state.level = s.level; state.caseMode = caseOf(s);
   Guard.reset();
   KIND[s.kind].run();
 }
@@ -4463,20 +4556,23 @@ function openChest(i) {
 /* Lesson station: learn before practising. Card after card from the game's own content, no points and no wrong answers.
    Reaching the last card passes the station (1 star, so lessons do not count like practice on the leaderboard). */
 function lessonCards(s) {
-  if (s.phase === 1) return s.letters.map(L => letterLesson(findLetter(L)));
+  if (s.phase === 1) return s.letters.map(L => letterLesson(findLetter(L), caseOf(s)));
   return [];
 }
-// one letter: both shapes, its sound in Hebrew, and its two picture words (tap to hear)
-function letterLesson(x) {
-  const l = x.L.toLowerCase(), atEnd = x.kws.some(k => k.end);
+// one letter, its sound in Hebrew, and its two picture words (tap to hear).
+// capitals: only the capital. small letters: the capital the child already knows, and its small letter
+function letterLesson(x, cs = 'upper') {
+  const low = cs === 'lower', l = x.L.toLowerCase(), shown = low ? l : x.L, atEnd = x.kws.some(k => k.end);
   const say = () => Speech.en(`${x.L}. ${x.kws.map(k => k.w).join('. ')}.`, .7);
-  const word = w => { const at = atEnd ? w.lastIndexOf(l) : w.indexOf(l); return at < 0 ? w : [w.slice(0, at), h('b', null, w[at]), w.slice(at + 1)]; };
+  const word = w => { const W = low ? w : w.toUpperCase(), at = atEnd ? W.lastIndexOf(shown) : W.indexOf(shown); return at < 0 ? W : [W.slice(0, at), h('b', null, W[at]), W.slice(at + 1)]; };
   return {
     say,
     body: () => [
       h('button', { class: 'ls-letter', type: 'button', 'aria-label': 'השמע את האות ' + x.L, onclick: e => { pop(e.currentTarget); Speech.en(`${l}, ${x.kws[0].w}`, .7); } },
-        h('span', { class: 'en' }, x.L), h('span', { class: 'en' }, l), h('small', null, '🔊')),
-      h('p', { class: 'prompt' }, ...bi(`האות ${x.L} נשמעת כמו `), h('span', { class: 'ls-snd' }, x.snd)),
+        ...(low ? [h('span', { class: 'en ls-cap' }, x.L), h('span', { class: 'ls-to', 'aria-hidden': 'true' }, '→'), h('span', { class: 'en' }, l)] : [h('span', { class: 'en' }, x.L)]),
+        h('small', null, '🔊')),
+      low ? h('p', { class: 'prompt' }, ...bi(`זו האות הקטנה של ${x.L}. היא נשמעת אותו דבר, כמו `), h('span', { class: 'ls-snd' }, x.snd))
+        : h('p', { class: 'prompt' }, ...bi(`האות ${x.L} נשמעת כמו `), h('span', { class: 'ls-snd' }, x.snd)),
       atEnd ? h('p', { class: 'hint blue' }, ...bi(`את ${x.L} שומעים בדרך כלל בסוף המילה.`)) : null,
       h('div', { class: 'ls-words' }, x.kws.map(k => h('button', { class: 'ls-word', type: 'button', onclick: e => { pop(e.currentTarget); Speech.en(k.w, .7); } },
         h('span', { class: 'emoji' }, k.e), h('span', { class: 'en w' }, ...[].concat(word(k.w))), h('span', { class: 'he' }, k.he)))),
@@ -4486,7 +4582,9 @@ function letterLesson(x) {
 }
 function Lesson(i) {
   endRun();
-  const s = stationAt(i), cards = lessonCards(s);
+  const s = stationAt(i);
+  state.caseMode = caseOf(s);
+  const cards = lessonCards(s);
   let k = 0;
   const done = () => {
     const m = mapState(), first = !(s.id in m.pass);
@@ -4495,7 +4593,7 @@ function Lesson(i) {
     const big = h('div', { class: 'big' }, '🎯');
     app.append(h('div', { class: 'end' }, big,
       h('h2', null, 'למדת! עכשיו מתאמנים 💪'),
-      s.letters.length ? h('div', { class: 'ls-sum en' }, s.letters.map(L => h('span', null, L + L.toLowerCase()))) : null,
+      s.letters.length ? h('div', { class: 'ls-sum en' }, s.letters.map(L => h('span', null, caseOf(s) === 'lower' ? L.toLowerCase() : L))) : null,
       h('p', { class: 'sub' }, 'בתחנות הבאות מתרגלים את מה שלמדת, ובסוף יש בוחן ועולים שלב.'),
       h('div', { class: 'row' }, h('button', { class: 'btn green', onclick: () => startStation(mapState().at) }, first ? 'לתרגול ←' : 'לתחנה הבאה ←')),
       h('div', { class: 'row' },
