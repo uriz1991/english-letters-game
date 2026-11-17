@@ -59,25 +59,30 @@ header.top{gap:6px;padding-left:12px;padding-right:12px}
 .home-tile.locked{opacity:.7}.home-tile.locked .ic{filter:grayscale(1)}
 .home-tile .new{position:absolute;top:-8px;inset-inline-start:-6px;background:var(--red);color:#fff;font-size:12px;font-weight:800;border-radius:99px;padding:2px 9px;box-shadow:0 2px 0 rgba(0,0,0,.15)}
 /* a character with what it wears */
-.avw{position:relative;display:inline-block;line-height:1}
-.avw > span{position:absolute;left:50%;pointer-events:none}
-.avw .w-head{top:-.38em;font-size:.58em;transform:translateX(-50%) rotate(-10deg)}
-.avw .w-face{top:.3em;font-size:.5em;transform:translateX(-50%)}
-.avw .w-neck{bottom:-.18em;font-size:.44em;transform:translateX(-50%)}
-.avw .w-a{position:static;font-size:1em}
+img.avw{width:1.3em;height:1.3em;border-radius:24%;vertical-align:middle;display:inline-block;object-fit:cover}
+.shop-me img.avw{width:104px;height:104px;border-radius:26px;box-shadow:0 0 0 4px #fff,0 4px 12px rgba(0,0,0,.12)}
+.shop-item img.avw{width:76px;height:76px;border-radius:18px;margin-bottom:4px}
+.shop-try img.avw{width:150px;height:150px;border-radius:30px;box-shadow:0 0 0 5px #fff,0 6px 16px rgba(0,0,0,.14)}
+.look-me{text-align:center;margin:6px 0 4px}.look-me img.avw{width:170px;height:170px;border-radius:34px;box-shadow:0 0 0 6px #fff,0 8px 20px rgba(0,0,0,.12)}
+.look-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;justify-content:center}
+.swatch{width:46px;height:46px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px var(--line)}
+.swatch.on{box-shadow:0 0 0 3px var(--blue)}
+.look-pick{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:var(--bg);border-radius:16px;padding:6px;font:inherit}
+.look-pick img.avw{width:64px;height:64px;border-radius:14px}.look-pick.on{box-shadow:0 0 0 3px var(--blue)}
+.who-card img.avw{width:76px;height:76px;border-radius:20px}
 /* the shop */
 .shop-top{display:flex;align-items:center;gap:14px;margin-bottom:12px}
-.shop-top .avw{font-size:74px;margin:14px 6px 4px}
+
 .shop-top .coins{font-size:26px;font-weight:800;color:#B7791F}
 .shop-top p{margin:4px 0 0;font-size:13px;color:var(--muted)}
 .shop-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
 .shop-item{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;border-radius:18px;background:var(--card);box-shadow:0 4px 0 var(--line);padding:12px 4px 10px;font:inherit;min-height:44px}
-.shop-item .e{font-size:42px;line-height:1.15}
+
 .shop-item b{font-size:13px}
 .shop-item small{font-size:13px;font-weight:800;color:#B7791F}
 .shop-item.own small{color:var(--blue-dark)}
 .shop-item.on{box-shadow:0 0 0 3px var(--green),0 4px 0 var(--line)}.shop-item.on small{color:var(--green-dark)}
-.shop-item.far .e{filter:grayscale(.85);opacity:.6}
+.shop-item.far img{filter:grayscale(.6);opacity:.65}
 .shop-lock{text-align:center}.shop-lock .big{font-size:80px}
 .shop-bar{height:14px;border-radius:99px;background:var(--line);overflow:hidden;margin:10px auto;max-width:280px}.shop-bar i{display:block;height:100%;background:linear-gradient(90deg,#F6C453,#F59E0B)}
 .pick-grid button.locked{opacity:.45;position:relative}.pick-grid button.locked::after{content:'🔒';position:absolute;bottom:2px;inset-inline-end:2px;font-size:14px}
@@ -767,7 +772,7 @@ const store = {
   set(k, v) { RAW.set(`p${PID}_${k}`, v); onKidChange(PID); },
   del(k) { RAW.del(`p${PID}_${k}`); onKidChange(PID); },
 };
-const PROFILE_KEYS = ['intro', 'wrote', 'shop', 'shopSeen', 'shopToast', 'stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits', 'spoken'];
+const PROFILE_KEYS = ['intro', 'wrote', 'shop', 'look', 'shopSeen', 'shopToast', 'stars', 'stageStars', 'done', 'case', 'level', 'resume', 'mastery', 'time', 'goalDays', 'stickers', 'goal', 'timerMin', 'timerUse', 'guess', 'map', 'freeBits', 'spoken'];
 
 const state = {
   stars: 0, stageStars: {}, done: {}, caseMode: 'upper', level: 1,
@@ -1637,65 +1642,158 @@ function Practice() {
   enter(list);
 }
 /* =========================================================
-   The shop. Every star also gives a coin: coins are spent, stars never go down (so the leaderboard does not drop).
-   coins = all stars ever earned - what was spent. Opens when the child reaches map station 20.
-   Characters: 4 free, the rest are bought (a character a child already had before the shop counts as bought).
-   Clothes and extras are worn on the character: one on the head, one on the face, one around the neck.
-   Saved per child in "shop" = { spent, owned: [characters and item ids], wear: { head, face, neck } }.
+   Characters (clay style): every child builds their own look for free (boy/girl, skin, hair, hair colour).
+   The shop sells what the character wears: tops, things on the head, glasses, and the colour of the frame.
+   Kippahs and a few basic tops are free. Drawn in code; every character becomes one cached image (data URI),
+   so it is painted once and never clashes with other drawings on the page.
+   Coins come with every star: coins are spent, stars never go down (so the leaderboard does not drop).
+   Saved per child: "look" = { skin, hair, hairColor } (boy/girl comes from the profile),
+   "shop" = { spent, owned: [item ids], wear: { top, head, glasses, bg } }.
    ========================================================= */
-// the shop is built but stays hidden until the new characters are ready (it would sell characters that are about to change)
-const SHOP_ON = false;
-const SHOP_AT = 19;   // station 20 (0-based)
-const FREE_AVATARS = ['🦁', '🐼', '🦄', '🐸'];
-const AV_PRICE = { '🐯': 40, '🦊': 40, '🐵': 50, '🐧': 50, '🐝': 60, '🐬': 60, '🐙': 70, '🦖': 80 };
-const WEAR = [
-  { id: 'cap', e: '🧢', name: 'כובע', slot: 'head', price: 20 },
-  { id: 'bow', e: '🎀', name: 'סרט', slot: 'head', price: 20 },
-  { id: 'tophat', e: '🎩', name: 'כובע קוסם', slot: 'head', price: 35 },
-  { id: 'grad', e: '🎓', name: 'כובע סיום', slot: 'head', price: 45 },
-  { id: 'crown', e: '👑', name: 'כתר', slot: 'head', price: 70 },
-  { id: 'glasses', e: '👓', name: 'משקפיים', slot: 'face', price: 25 },
-  { id: 'sun', e: '🕶️', name: 'משקפי שמש', slot: 'face', price: 30 },
-  { id: 'scarf', e: '🧣', name: 'צעיף', slot: 'neck', price: 25 },
-  { id: 'medal', e: '🏅', name: 'מדליה', slot: 'neck', price: 50 },
+const SHOP_ON = true;
+const SHOP_AT = 19;   // the shop opens at map station 20 (0-based)
+const SKINS = { light: '#F4C9A8', medium: '#E3A880', tan: '#C68A5E', dark: '#7E5236' };
+const HAIRS = { brown: '#6E4428', dark: '#3A2A22', black: '#231C1A', ginger: '#D2643A', blond: '#D9A84E' };
+const HAIR_STYLES = { m: ['short', 'side', 'curly'], f: ['long', 'bob', 'bun', 'curly'] };
+const HAIR_NAMES = { short: 'קצר', side: 'בצד', curly: 'תלתלים', long: 'ארוך', bob: 'קארה', bun: 'קוקו' };
+// APPEND ONLY: children keep these ids in what they own
+const ITEMS = [
+  { id: 'teeO', slot: 'top', name: 'חולצה כתומה', t: 'tee', c: '#E8743B', price: 0 },
+  { id: 'teeG', slot: 'top', name: 'חולצה ירוקה', t: 'tee', c: '#4E9A5A', price: 0 },
+  { id: 'teeP', slot: 'top', name: 'חולצה ורודה', t: 'tee', c: '#E27AA6', price: 0 },
+  { id: 'stripes', slot: 'top', name: 'חולצת פסים', t: 'stripes', c: '#3E78C8', price: 30 },
+  { id: 'polo', slot: 'top', name: 'פולו', t: 'polo', c: '#5AA0D8', price: 35 },
+  { id: 'hoodie', slot: 'top', name: 'קפוצ׳ון', t: 'hoodie', c: '#B8742E', price: 40 },
+  { id: 'hoodieP', slot: 'top', name: 'קפוצ׳ון סגול', t: 'hoodie', c: '#8A63D2', price: 40 },
+  { id: 'cardigan', slot: 'top', name: 'קרדיגן', t: 'cardigan', c: '#D9787A', price: 40 },
+  { id: 'sweater', slot: 'top', name: 'סוודר', t: 'sweater', c: '#E8B23A', c2: '#D97A9A', price: 45 },
+  { id: 'overalls', slot: 'top', name: 'סרבל', t: 'overalls', price: 50 },
+  { id: 'denim', slot: 'top', name: 'ג׳קט ג׳ינס', t: 'denim', price: 50 },
+  { id: 'kippah', slot: 'head', name: 'כיפה', price: 0 },
+  { id: 'kippahKnit', slot: 'head', name: 'כיפה סרוגה', price: 0 },
+  { id: 'flower', slot: 'head', name: 'פרח', price: 20 },
+  { id: 'bow', slot: 'head', name: 'סרט', price: 20 },
+  { id: 'cap', slot: 'head', name: 'כובע מצחייה', price: 30 },
+  { id: 'beanie', slot: 'head', name: 'כובע צמר', price: 35 },
+  { id: 'round', slot: 'glasses', name: 'משקפיים', price: 25 },
+  { id: 'sun', slot: 'glasses', name: 'משקפי שמש', price: 40 },
+  { id: 'bgCream', slot: 'bg', name: 'שמנת', bg: '#F1ECE8', price: 0 },
+  { id: 'bgMint', slot: 'bg', name: 'מנטה', bg: '#D9F2E3', price: 15 },
+  { id: 'bgSky', slot: 'bg', name: 'שמיים', bg: '#D8E8FA', price: 15 },
+  { id: 'bgPeach', slot: 'bg', name: 'אפרסק', bg: '#FBE0D2', price: 15 },
+  { id: 'bgLilac', slot: 'bg', name: 'לילך', bg: '#E7DDFA', price: 20 },
+  { id: 'bgSun', slot: 'bg', name: 'שמש', bg: '#FFEFB8', price: 20 },
 ];
+const itemOf = id => ITEMS.find(x => x.id === id);
+const cdk = (hex, k = .78) => '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+const clt = (hex, k = .35) => '#' + [1, 3, 5].map(i => { const v = parseInt(hex.slice(i, i + 2), 16); return Math.round(v + (255 - v) * k).toString(16).padStart(2, '0'); }).join('');
+const Look = {
+  get(id = PID) {
+    const p = Profiles.get(id), g = p && p.g === 'f' ? 'f' : 'm', l = RAW.get(`p${id}_look`, null) || {};
+    return { g, skin: SKINS[l.skin] ? l.skin : 'light', hair: HAIR_STYLES[g].includes(l.hair) ? l.hair : HAIR_STYLES[g][0], hairColor: HAIRS[l.hairColor] ? l.hairColor : 'brown' };
+  },
+  set(patch) { const { g, ...l } = { ...this.get(), ...patch }; store.set('look', l); },
+};
+// the drawing (200 x 200). Soft light and shadow are blurred blobs clipped inside every shape.
+function clayAvatar(o) {
+  const skin = SKINS[o.skin], hair = HAIRS[o.hairColor], girl = o.g === 'f';
+  const defs = [], out = [];
+  let n = 0;
+  defs.push('<filter id="b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"/></filter><filter id="s" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>');
+  const clay = (shape, color, [x, y, w, h], q = {}) => {
+    const cid = 'c' + n++;
+    defs.push(`<clipPath id="${cid}">${shape('#000')}</clipPath>`);
+    return shape(color) + `<g clip-path="url(#${cid})" filter="url(#b)"><ellipse cx="${x + w * (q.lx ?? .32)}" cy="${y + h * (q.ly ?? .25)}" rx="${w * .42}" ry="${h * .36}" fill="${clt(color, .5)}" opacity="${q.lo ?? .75}"/><ellipse cx="${x + w * .9}" cy="${y + h * 1.02}" rx="${w * .7}" ry="${h * .5}" fill="${cdk(color, .62)}" opacity="${q.do ?? .6}"/></g>`;
+  };
+  const inside = (d, content) => { const cid = 'i' + n++; defs.push(`<clipPath id="${cid}"><path d="${d}"/></clipPath>`); return `<g clip-path="url(#${cid})">${content}</g>`; };
+  const path = d => c => `<path d="${d}" fill="${c}"/>`;
+  const ell = (cx, cy, rx, ry) => c => `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${c}"/>`;
+  const SH = 'M18 200 Q20 150 66 140 L134 140 Q180 150 182 200 Z', SB = [18, 140, 164, 60];
+  const top = o.top || { t: 'tee', c: '#E8743B' }, tc = top.c || '#E8743B';
+  if (o.hair === 'long') out.push(clay(path('M54 84 Q50 30 100 26 Q150 30 146 84 L152 168 Q100 176 48 168 Z'), hair, [48, 26, 104, 150]));
+  if (o.hair === 'bob') out.push(clay(path('M54 84 Q50 30 100 26 Q150 30 146 84 L150 132 Q100 140 50 132 Z'), hair, [50, 26, 100, 114]));
+  const neckLine = c => `<path d="M80 140 Q100 158 120 140" stroke="${c}" stroke-width="4" fill="none" opacity=".6"/>`;
+  const TOP = {
+    tee: () => clay(path(SH), tc, SB) + neckLine(cdk(tc, .75)),
+    stripes: () => clay(path(SH), '#F3EFE8', SB) + inside(SH, `<g opacity=".85">${[152, 164, 176].map(y => `<path d="M0 ${y} L200 ${y}" stroke="${tc}" stroke-width="6"/>`).join('')}</g>`) + neckLine('#CFC7BB'),
+    polo: () => clay(path(SH), tc, SB),
+    hoodie: () => clay(path(SH), tc, SB),
+    cardigan: () => clay(path(SH), tc, SB) + clay(path('M88 142 L112 142 L114 200 L86 200 Z'), '#F3EFE8', [86, 142, 28, 58]) + '<circle cx="91" cy="172" r="2.2" fill="#fff"/><circle cx="91" cy="188" r="2.2" fill="#fff"/>',
+    sweater: () => clay(path(SH), tc, SB) + inside(SH, `<path d="M0 166 L200 166" stroke="${top.c2 || '#D97A9A'}" stroke-width="9" opacity=".9"/>`) + neckLine(cdk(tc, .75)),
+    overalls: () => clay(path(SH), '#E8743B', SB) + clay(path('M64 162 L136 162 L140 200 L60 200 Z'), '#3E6FB0', [60, 162, 80, 38]) + '<path d="M72 144 L70 170 M128 144 L130 170" stroke="#3E6FB0" stroke-width="8" stroke-linecap="round"/><circle cx="72" cy="168" r="3" fill="#E8C35A"/><circle cx="128" cy="168" r="3" fill="#E8C35A"/>',
+    denim: () => clay(path(SH), '#4F79AE', SB) + clay(path('M86 142 L114 142 L118 200 L82 200 Z'), '#F3EFE8', [82, 142, 36, 58]) + '<path d="M86 142 L74 176 L82 200 M114 142 L126 176 L118 200" stroke="#3B5F8E" stroke-width="3" fill="none"/>',
+  };
+  out.push((TOP[top.t] || TOP.tee)());
+  out.push(clay(path('M84 112 L116 112 L118 150 Q100 158 82 150 Z'), skin, [82, 112, 36, 46], { lo: .3 }));
+  out.push(`<path d="M84 116 Q100 134 116 116 L116 128 Q100 142 84 128 Z" fill="${cdk(skin, .7)}" opacity=".35" filter="url(#s)"/>`);
+  if (top.t === 'hoodie') out.push(clay(path('M66 140 Q72 124 84 122 Q100 150 116 122 Q128 124 134 140 Q120 160 100 160 Q80 160 66 140 Z'), cdk(tc, .9), [66, 122, 68, 38]) + '<path d="M94 158 L93 178 M106 158 L107 178" stroke="#F3EFE8" stroke-width="2.4" stroke-linecap="round"/>');
+  if (top.t === 'polo') out.push(clay(path('M80 138 L100 152 L90 162 L74 146 Z'), clt(tc, .1), [74, 138, 26, 24]) + clay(path('M120 138 L100 152 L110 162 L126 146 Z'), clt(tc, .1), [100, 138, 26, 24]) + '<circle cx="100" cy="166" r="2" fill="#fff"/><circle cx="100" cy="176" r="2" fill="#fff"/>');
+  out.push(clay(ell(58, 92, 8, 11), skin, [50, 81, 16, 22], { lo: .4 }), clay(ell(142, 92, 8, 11), skin, [134, 81, 16, 22], { lo: .4 }));
+  out.push(clay(ell(100, 84, 43, 47), skin, [57, 37, 86, 94], { lx: .35, ly: .3, do: .45 }));
+  out.push(`<ellipse cx="84" cy="90" rx="5" ry="6.2" fill="#2A211D"/><ellipse cx="116" cy="90" rx="5" ry="6.2" fill="#2A211D"/><circle cx="86" cy="87.6" r="1.8" fill="#fff"/><circle cx="118" cy="87.6" r="1.8" fill="#fff"/>
+    <path d="M75 ${girl ? 77 : 76} Q84 ${girl ? 72 : 71} 92 76" stroke="${cdk(hair, .85)}" stroke-width="${girl ? 3.2 : 4.4}" fill="none" stroke-linecap="round"/><path d="M108 76 Q116 ${girl ? 72 : 71} 125 ${girl ? 77 : 76}" stroke="${cdk(hair, .85)}" stroke-width="${girl ? 3.2 : 4.4}" fill="none" stroke-linecap="round"/>`);
+  out.push(clay(ell(100, 102, 7, 6), skin, [93, 96, 14, 12], { lo: .8, do: .7 }));
+  out.push(`<ellipse cx="74" cy="104" rx="8" ry="5" fill="#F08A8A" opacity=".22"/><ellipse cx="126" cy="104" rx="8" ry="5" fill="#F08A8A" opacity=".22"/>`);
+  out.push(`<path d="M90 113 Q100 123 110 113 Q100 116 90 113 Z" fill="#8E3B3B"/><path d="M93 114 Q100 116 107 114 L106 115.5 Q100 117 94 115.5 Z" fill="#fff"/>`);
+  const HF = {
+    short: path('M57 82 Q54 38 96 34 Q138 32 145 70 Q146 82 143 90 Q138 66 120 58 Q104 66 84 60 Q66 66 60 88 Z'),
+    side: path('M57 86 Q52 40 100 34 Q148 38 143 84 Q136 62 116 56 Q120 66 104 66 Q114 56 96 52 Q74 62 62 64 Q58 74 57 86 Z'),
+    curly: c => [...Array(11)].map((_, i) => { const a = Math.PI * (1 + i * .1); return `<circle cx="${(100 + Math.cos(a) * 42).toFixed(1)}" cy="${(80 + Math.sin(a) * 46).toFixed(1)}" r="13" fill="${c}"/>`; }).join('') + `<ellipse cx="100" cy="48" rx="38" ry="18" fill="${c}"/>`,
+    long: path('M58 92 Q54 36 100 34 Q146 36 142 92 Q136 58 104 52 L100 60 L96 52 Q64 58 58 92 Z'),
+    bob: path('M58 92 Q54 36 100 34 Q146 36 142 92 Q138 60 112 54 Q96 66 72 62 Q60 72 58 92 Z'),
+    bun: c => `<circle cx="100" cy="30" r="17" fill="${c}"/>` + path('M58 84 Q56 38 100 36 Q144 38 142 84 Q132 56 100 54 Q68 56 58 84 Z')(c),
+  };
+  out.push(clay(HF[o.hair] || HF.short, hair, [56, 14, 90, 76], { ly: .2, do: .5 }));
+  out.push(`<path d="M76 46 Q96 38 118 42" stroke="${clt(hair, .4)}" stroke-width="3" fill="none" stroke-linecap="round" opacity=".5"/>`);
+  const HEAD = {
+    cap: () => clay(path('M56 66 Q56 24 100 22 Q144 24 144 66 Q100 54 56 66 Z'), '#3E78C8', [56, 22, 88, 44]) + clay(path('M56 64 Q100 52 144 64 Q156 70 160 78 Q100 64 40 78 Q46 70 56 64 Z'), '#3566AA', [40, 52, 120, 26]),
+    kippah: () => clay(path('M70 44 Q100 16 130 44 Q100 36 70 44 Z'), '#24345E', [70, 18, 60, 26], { lo: .5 }) + '<path d="M76 41 Q100 22 124 41" stroke="#E8C35A" stroke-width="1.8" fill="none"/>',
+    kippahKnit: () => clay(path('M68 46 Q100 14 132 46 Q100 37 68 46 Z'), '#F4F2EE', [68, 16, 64, 30], { lo: .3 }) + '<path d="M74 42 Q100 22 126 42 M80 35 Q100 21 120 35" stroke="#4E86D8" stroke-width="1.8" fill="none"/>',
+    beanie: () => clay(path('M56 74 Q54 24 100 22 Q146 24 144 74 Z'), '#E59A3A', [54, 22, 92, 52]) + clay(path('M54 66 Q100 56 146 66 L146 78 Q100 68 54 78 Z'), '#CF8429', [54, 56, 92, 22]),
+    flower: () => `<g transform="translate(70 46)">${[0, 72, 144, 216, 288].map(a => `<ellipse cx="0" cy="-7" rx="5" ry="7" fill="#FFF3D6" transform="rotate(${a})"/>`).join('')}<circle r="4.5" fill="#F2B632"/></g>`,
+    bow: () => '<g transform="translate(132 44) rotate(16)"><path d="M0 0 L-16 -10 Q-20 0 -16 10 Z M0 0 L16 -10 Q20 0 16 10 Z" fill="#E86A8E"/><circle r="4.5" fill="#CF4F75"/></g>',
+  };
+  if (o.head && HEAD[o.head]) out.push(HEAD[o.head]());
+  if (o.glasses) out.push(`<g fill="none" stroke="${o.glasses === 'sun' ? '#2B2B2B' : '#C26A3A'}" stroke-width="2.6"><circle cx="84" cy="90" r="12"/><circle cx="116" cy="90" r="12"/><path d="M96 89 Q100 86 104 89 M72 88 L60 86 M128 88 L140 86"/></g>` + (o.glasses === 'sun' ? '<circle cx="84" cy="90" r="11" fill="#E0892E" opacity=".75"/><circle cx="116" cy="90" r="11" fill="#E0892E" opacity=".75"/>' : ''));
+  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs>${defs.join('')}</defs><rect width="200" height="200" rx="28" fill="${o.bg || '#F1ECE8'}"/><g transform="translate(-17 -4) scale(1.17)">${out.join('')}</g></svg>`;
+}
+// one cached image per look + clothes
+const AV_CACHE = new Map();
+function avatarSrc(look, wear) {
+  const top = itemOf(wear.top) || itemOf('teeO'), o = { ...look, top: { t: top.t, c: top.c, c2: top.c2 },
+    head: wear.head && itemOf(wear.head) ? wear.head : null, glasses: wear.glasses && itemOf(wear.glasses) ? wear.glasses : null, bg: (itemOf(wear.bg) || itemOf('bgCream')).bg };
+  const key = JSON.stringify(o);
+  if (!AV_CACHE.has(key)) AV_CACHE.set(key, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(clayAvatar(o)));
+  return AV_CACHE.get(key);
+}
+// the character of any child, with what it wears (wearOverride = trying something on in the shop)
+function avatarEl(id = PID, wearOverride, lookOverride) {
+  const p = Profiles.get(id), w = wearOverride || Shop.get(id).wear, l = lookOverride || Look.get(id);
+  return h('img', { class: 'avw', src: avatarSrc(l, w), alt: p ? p.name : '', 'data-wear': [w.top, w.head, w.glasses, w.bg].filter(Boolean).join(','), 'data-look': [l.g, l.skin, l.hair, l.hairColor].join(',') });
+}
 const Shop = {
-  get(id = PID) { const d = RAW.get(`p${id}_shop`, null) || {}; return { spent: d.spent || 0, owned: d.owned || [], wear: d.wear || {} }; },
+  get(id = PID) { const d = RAW.get(`p${id}_shop`, null) || {}; return { spent: d.spent || 0, owned: d.owned || [], wear: { top: 'teeO', bg: 'bgCream', ...(d.wear || {}) } }; },
   save(d) { store.set('shop', d); },
   coins() { return Math.max(0, state.stars - this.get().spent); },
   open(m = mapState()) { return SHOP_ON && m.at >= SHOP_AT; },
-  // free, bought, or the character the child already had
-  hasAvatar(av, id = PID) { const p = Profiles.get(id); return FREE_AVATARS.includes(av) || this.get(id).owned.includes(av) || !!(p && p.avatar === av); },
-  buy(key, price) {
+  has(it, id = PID) { return it.price === 0 || this.get(id).owned.includes(it.id); },
+  buy(it) {
     const d = this.get();
-    if (d.owned.includes(key) || this.coins() < price) return false;
-    d.spent += price; d.owned.push(key); this.save(d); return true;
+    if (this.has(it) || this.coins() < it.price) return false;
+    d.spent += it.price; d.owned.push(it.id); this.save(d); return true;
   },
-  // switching character: the old one stays owned (it was the child's before)
-  choose(av) {
-    const p = me(), d = this.get();
-    if (!this.hasAvatar(av)) return;
-    if (!FREE_AVATARS.includes(p.avatar) && !d.owned.includes(p.avatar)) { d.owned.push(p.avatar); this.save(d); }
-    Profiles.update(PID, { avatar: av });
-  },
+  // tops and frames are always one of them; head and glasses can be taken off (tap again)
   wear(it) {
-    const d = this.get();
-    if (!d.owned.includes(it.id)) return;
-    d.wear = { ...d.wear, [it.slot]: d.wear[it.slot] === it.id ? undefined : it.id };
-    if (!d.wear[it.slot]) delete d.wear[it.slot];
+    if (!this.has(it)) return;
+    const d = this.get(), cur = d.wear[it.slot];
+    if ((it.slot === 'head' || it.slot === 'glasses') && cur === it.id) delete d.wear[it.slot]; else d.wear[it.slot] = it.id;
     this.save(d);
   },
 };
-// the character with what it wears (any child)
-function avatarEl(id = PID) {
-  const p = Profiles.get(id), w = Shop.get(id).wear;
-  return h('span', { class: 'avw' }, h('span', { class: 'w-a' }, p ? p.avatar : '🙂'),
-    ...['head', 'face', 'neck'].filter(sl => w[sl] && WEAR.some(x => x.id === w[sl])).map(sl => h('span', { class: 'w-' + sl, 'aria-hidden': 'true' }, WEAR.find(x => x.id === w[sl]).e)));
-}
-let shopTab = 'chars';
+let shopTab = 'top';
+const SHOP_TABS = [['top', '👕 בגדים', ['top']], ['head', '🧢 כובעים ומשקפיים', ['head', 'glasses']], ['bg', '🎨 רקע', ['bg']]];
 function ShopScreen(tab) {
   if (!PID) return ProfilePicker();
-  if (!SHOP_ON) return Home();
   endRun();
   Lock.open = false;
   const app = screen('החנות'); menu = 'home';
@@ -1704,56 +1802,71 @@ function ShopScreen(tab) {
     const left = SHOP_AT - m.at;
     app.append(h('div', { class: 'end shop-lock' }, h('div', { class: 'big' }, '🛍️'),
       h('h2', null, '🔒 החנות נפתחת בתחנה 20'),
-      h('div', { class: 'shop-bar' }, h('i', { style: `width:${Math.round(m.at / SHOP_AT * 100)}%` })),
+      h('div', { class: 'shop-bar' }, h('i', { style: `width:${Math.round(Math.max(0, m.at) / SHOP_AT * 100)}%` })),
       h('p', { class: 'sub' }, left === 1 ? 'עוד תחנה אחת במפה!' : `עוד ${left} תחנות במפה.`),
-      h('p', { class: 'sub' }, 'בחנות קונים דמויות, כובעים, משקפיים ועוד, במטבעות 🪙 שמרוויחים על כל כוכב.'),
-      h('div', { class: 'row' }, h('button', { class: 'btn green', onclick: () => MapScreen() }, '🗺️ למפה'))));
+      h('p', { class: 'sub' }, 'בחנות קונים בגדים, כובעים, משקפיים ורקעים לדמות שלך, במטבעות 🪙 שמרוויחים על כל כוכב.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn secondary', onclick: () => LookEditor() }, '✏️ לעצב את הדמות שלי'), h('button', { class: 'btn green', onclick: () => MapScreen() }, '🗺️ למפה'))));
     return;
   }
   if (tab) shopTab = tab;
   if (!store.get('shopSeen', false)) store.set('shopSeen', true);
-  const p = me(), d = Shop.get(), coins = Shop.coins();
-  const preview = avatarEl();
-  const top = h('div', { class: 'card shop-top' }, preview,
+  const d = Shop.get(), coins = Shop.coins();
+  const top = h('div', { class: 'card shop-top' }, h('span', { class: 'shop-me' }, avatarEl()),
     h('div', null, h('div', { class: 'coins' }, `🪙 ${coins}`), h('b', null, 'מטבעות'),
-      h('p', null, 'כל כוכב נותן מטבע. כשקונים, הכוכבים והמקום בטבלה לא יורדים.')));
-  const tabs = h('div', { class: 'seg board-tabs', role: 'tablist' }, [['chars', '🐾 דמויות'], ['wear', '🎩 בגדים ותוספות']].map(([k, t]) =>
+      h('p', null, 'כל כוכב נותן מטבע. כשקונים, הכוכבים והמקום בטבלה לא יורדים.'),
+      h('button', { class: 'link-btn', style: 'padding:6px 0', onclick: () => LookEditor(() => ShopScreen()) }, '✏️ לשנות מראה')));
+  const tabs = h('div', { class: 'seg board-tabs', role: 'tablist' }, SHOP_TABS.map(([k, t]) =>
     h('button', { class: k === shopTab ? 'on' : '', role: 'tab', 'aria-selected': String(k === shopTab), onclick: () => ShopScreen(k) }, t)));
-  const item = (e, name, owned, on, price, act) => h('button', {
-    class: 'shop-item' + (owned ? ' own' : '') + (on ? ' on' : '') + (!owned && coins < price ? ' far' : ''), type: 'button',
-    'aria-label': `${name || e}${on ? ', עליך עכשיו' : owned ? '' : `, ${price} מטבעות`}`, onclick: act },
-    h('span', { class: 'e' }, e), h('b', null, name), h('small', null, on ? '✅ עליי' : owned ? (shopTab === 'chars' ? 'לבחור' : 'ללבוש') : `🪙 ${price}`));
-  const grid = shopTab === 'chars'
-    ? h('div', { class: 'shop-grid' }, AVATARS.map(av => {
-      const owned = Shop.hasAvatar(av), on = p.avatar === av, price = AV_PRICE[av] || 0;
-      return item(av, '', owned, on, price, () => owned ? (Shop.choose(av), ShopScreen()) : buyAsk(av, 'את הדמות', av, price, () => Shop.choose(av)));
-    }))
-    : h('div', { class: 'shop-grid' }, WEAR.map(it => {
-      const owned = d.owned.includes(it.id), on = d.wear[it.slot] === it.id;
-      return item(it.e, it.name, owned, on, it.price, () => owned ? (Shop.wear(it), ShopScreen()) : buyAsk(it.id, it.name, it.e, it.price, () => Shop.wear(it)));
-    }));
+  const slots = SHOP_TABS.find(x => x[0] === shopTab)[2];
+  const grid = h('div', { class: 'shop-grid' }, ITEMS.filter(it => slots.includes(it.slot)).map(it => {
+    const owned = Shop.has(it), on = d.wear[it.slot] === it.id;
+    const tryOn = { ...d.wear, [it.slot]: it.id };
+    return h('button', { class: 'shop-item' + (owned ? ' own' : '') + (on ? ' on' : '') + (!owned && coins < it.price ? ' far' : ''), type: 'button',
+      'aria-label': `${it.name}${on ? ', עליך עכשיו' : owned ? (it.price ? ', שלך' : ', חינם') : `, ${it.price} מטבעות`}`, 'data-item': it.id,
+      onclick: () => owned ? (Shop.wear(it), ShopScreen()) : buyAsk(it) },
+      avatarEl(PID, tryOn), h('b', null, it.name), h('small', null, on ? '✅ עליי' : owned ? (it.price ? 'ללבוש' : 'חינם') : `🪙 ${it.price}`));
+  }));
   app.append(top, tabs, grid,
-    h('p', { class: 'sub', style: 'margin-top:12px' }, shopTab === 'wear' ? 'לוחצים על משהו שכבר קנית כדי ללבוש או להוריד אותו.' : 'לוחצים על דמות שכבר יש לך כדי לעבור אליה.'));
+    h('p', { class: 'sub', style: 'margin-top:12px' }, shopTab === 'head' ? 'לוחצים שוב על כובע או משקפיים כדי להוריד אותם.' : 'לוחצים על משהו שכבר שלך כדי ללבוש אותו.'));
   enter(grid);
 }
-// "buy it?" on top of the shop. Not enough coins: how many more are needed
-function buyAsk(key, name, e, price, then) {
+// "buy it?": the child sees the character wearing it first. Not enough coins: how many more are needed
+function buyAsk(it) {
   const m = $('#modal'), coins = Shop.coins(), close = () => { m.hidden = true; m.replaceChildren(); };
-  const big = h('span', { class: 'sticker' }, e);
-  const enough = coins >= price;
-  m.replaceChildren(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' }, big,
-    h('div', { class: 'prompt' }, enough ? `לקנות ${name}?` : `חסרים עוד ${price - coins} מטבעות`),
-    h('p', { class: 'sub' }, enough ? `המחיר: ${price} 🪙. יש לך ${coins}, ויישארו ${coins - price}.` : 'כל כוכב במפה או בתרגול נותן מטבע. עוד קצת תרגול 💪'),
+  const pic = h('span', { class: 'shop-try' }, avatarEl(PID, { ...Shop.get().wear, [it.slot]: it.id }));
+  const enough = coins >= it.price;
+  m.replaceChildren(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' }, pic,
+    h('div', { class: 'prompt' }, enough ? `לקנות ${it.name}?` : `חסרים עוד ${it.price - coins} מטבעות`),
+    h('p', { class: 'sub' }, enough ? `המחיר: ${it.price} 🪙. יש לך ${coins}, ויישארו ${coins - it.price}.` : 'כל כוכב במפה או בתרגול נותן מטבע. עוד קצת תרגול 💪'),
     h('div', { class: 'row' },
       enough ? h('button', { class: 'btn green', onclick: () => {
-        if (!Shop.buy(key, price)) return close();
-        then(); close(); ShopScreen();
-        const pv = $('.shop-top .avw'); if (pv) { pop(pv); burst(pv, 18); }
-        toast(`🎉 קנית ${name.replace(/^את /, '')} ${e}!`);
-      } }, `🪙 לקנות`) : null,
+        if (!Shop.buy(it)) return close();
+        Shop.wear(it); close(); ShopScreen();
+        const pv = $('.shop-top .shop-me'); if (pv) { pop(pv); burst(pv, 18); }
+        toast(`🎉 קנית ${it.name}!`);
+      } }, '🪙 לקנות') : null,
       h('button', { class: 'btn secondary', onclick: close }, enough ? 'לא עכשיו' : 'אוקיי'))));
   m.hidden = false;
-  pop(big);
+  pop(pic);
+}
+// building the character: free, any time (skin, hair, hair colour). Boy/girl comes from the profile
+function LookEditor(back) {
+  if (!PID) return ProfilePicker();
+  endRun();
+  const app = screen('הדמות שלי'); menu = 'home';
+  const l = Look.get(), redraw = () => LookEditor(back);
+  const swatch = (color, on, label, act) => h('button', { class: 'swatch' + (on ? ' on' : ''), type: 'button', style: `background:${color}`, 'aria-label': label, 'aria-pressed': String(on), onclick: act });
+  const row = (title, ...kids) => h('div', { class: 'card', style: 'margin:10px 0' }, h('b', null, title), h('div', { class: 'look-row' }, ...kids));
+  app.append(
+    h('div', { class: 'look-me' }, avatarEl()),
+    row('🎨 צבע עור', Object.entries(SKINS).map(([k, c]) => swatch(c, l.skin === k, 'צבע עור', () => { Look.set({ skin: k }); redraw(); }))),
+    row('💇 תסרוקת', HAIR_STYLES[l.g].map(k => h('button', { class: 'look-pick' + (l.hair === k ? ' on' : ''), type: 'button', 'aria-pressed': String(l.hair === k), onclick: () => { Look.set({ hair: k }); redraw(); } },
+      avatarEl(PID, null, { ...l, hair: k }), h('small', null, HAIR_NAMES[k])))),
+    row('🖌️ צבע שיער', Object.entries(HAIRS).map(([k, c]) => swatch(c, l.hairColor === k, 'צבע שיער', () => { Look.set({ hairColor: k }); redraw(); }))),
+    h('div', { class: 'row' },
+      Shop.open() ? h('button', { class: 'btn secondary', onclick: () => ShopScreen() }, '🛍️ לחנות') : null,
+      h('button', { class: 'btn green', onclick: () => (back || Home)() }, 'שמירה ✓')));
+  enter($('.look-me', app));
 }
 /* My settings (for the child): my learning clock, the parent's timer (only to look at), my points, the voice, big or small letters */
 function KidSettings() {
@@ -2039,7 +2152,7 @@ function ParentArea() {
     const min = Math.floor((RAW.get(`p${r.id}_time`, {})[today] || 0) / 60);
     const playing = r.g === 'f' ? 'משחקת' : 'משחק';
     return h('div', { class: 'card pa-kid' + (r.id === PID ? ' me' : '') },
-      h('div', { class: 'pa-top' }, h('span', { class: 'av' }, r.avatar),
+      h('div', { class: 'pa-top' }, h('span', { class: 'av' }, avatarEl(r.id)),
         h('span', { class: 'nm' }, h('b', null, r.name, r.id === PID ? h('span', { class: 'pa-now' }, playing + ' עכשיו') : null),
           h('small', null, `🗺️ תחנה ${r.at + 1}: ${stationTitle(stationAt(r.at))}`))),
       h('div', { class: 'pa-stats' }, stat('⭐', r.mstars, 'כוכבים במפה'), stat('⏱️', min, 'דקות היום'), stat('🔥', r.fire, 'ימים ברצף')),
@@ -2660,7 +2773,7 @@ function ProfileForm(id, back) {
   let avatar = old ? old.avatar : AVATARS[0], gender = old ? old.g : 'm';
   const name = h('input', { class: 'text-in', type: 'text', maxlength: '14', autocomplete: 'off', placeholder: 'למשל: נועם', value: old ? old.name : '' });
   // characters from the shop: only free ones, or ones this child already has
-  const canPick = a => !SHOP_ON || FREE_AVATARS.includes(a) || (!!old && Shop.hasAvatar(a, id));
+  const canPick = () => true;
   const avGrid = h('div', { class: 'pick-grid' }, AVATARS.map(a => {
     const ok = canPick(a);
     const b = h('button', { type: 'button', class: (a === avatar ? 'on' : '') + (ok ? '' : ' locked'), 'aria-label': ok ? a : a + ' נעול, קונים בחנות' }, a);
@@ -2690,7 +2803,7 @@ function ProfileForm(id, back) {
   app.append(...[
     old ? null : h('div', { class: 'home-hello' }, h('h1', null, 'שלום! 👋'), h('p', { class: 'sub' }, 'בואו ניצור פרופיל לילד שמשחק.')),
     h('label', { class: 'field' }, 'שם או כינוי'), name,
-    h('p', { class: 'field' }, 'בחירת דמות'), avGrid,
+    h('p', { class: 'field' }, 'סמל לטבלת האלופים'), avGrid,
     h('p', { class: 'field' }, 'איך לפנות?'), seg,
     err,
     h('div', { class: 'row' }, h('button', { class: 'btn green wide', onclick: save }, old ? 'שמירה' : 'יאללה, מתחילים! ←')),
@@ -2720,13 +2833,13 @@ const legend = () => h('div', { class: 'legend' },
   h('span', null, h('i', { style: 'background:var(--card);box-shadow:0 0 0 1px var(--line)' }), 'עוד לא נלמדה'));
 function myLook() {
   const w = Shop.get().wear, open = Shop.open();
-  const on = ['head', 'face', 'neck'].map(sl => WEAR.find(x => x.id === w[sl])).filter(Boolean);
+  const on = [w.top, w.head, w.glasses].map(itemOf).filter(Boolean);
   return h('div', { class: 'card my-look' },
     h('b', null, '👕 הדמות שלי'),
-    h('p', { class: 'sub', style: 'margin:4px 0 8px' }, on.length ? g('לובש', 'לובשת') + ' עכשיו: ' +on.map(x => x.e + ' ' + x.name).join(', ') : open ? 'עוד אין בגדים. קונים אותם בחנות במטבעות 🪙' : 'בחנות אפשר יהיה לקנות בגדים ודמויות. היא נפתחת בתחנה 20.'),
-    h('div', { class: 'row' }, open
-      ? h('button', { class: 'btn small', onclick: () => ShopScreen(on.length ? 'wear' : 'chars') }, `🛍️ לחנות · 🪙 ${Shop.coins()}`)
-      : h('button', { class: 'btn secondary small', onclick: () => ShopScreen() }, '🔒 החנות')));
+    h('p', { class: 'sub', style: 'margin:4px 0 8px' }, g('לובש', 'לובשת') + ' עכשיו: ' + on.map(x => x.name).join(', ')),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn secondary small', onclick: () => LookEditor(() => MyArea()) }, '✏️ לעצב את הדמות'),
+      open ? h('button', { class: 'btn small', onclick: () => ShopScreen() }, `🛍️ לחנות · 🪙 ${Shop.coins()}`) : h('button', { class: 'btn secondary small', onclick: () => ShopScreen() }, '🔒 החנות')));
 }
 function MyArea() {
   Lock.open = false;
@@ -2747,7 +2860,7 @@ function MyArea() {
     h('div', { class: 'sec-title' }, g('האותיות שאני יודע', 'האותיות שאני יודעת')),
     letterGrid(), legend());
   // the child's own character and what it wears (bought in the shop). Editing the profile is in the parents area
-  if (SHOP_ON) app.insertBefore(myLook(), app.children[1]);
+  app.insertBefore(myLook(), app.children[1]);
   enter(album);
 }
 
@@ -2833,7 +2946,7 @@ function ParentReport() {
   };
 
   app.append(
-    h('div', { class: 'me-head' }, h('div', { class: 'av', style: 'font-size:56px' }, p.avatar), h('h1', null, p.name)),
+    h('div', { class: 'me-head' }, h('div', { class: 'av', style: 'font-size:56px' }, avatarEl()), h('h1', null, p.name)),
     h('div', { class: 'stats' },
       h('div', { class: 'stat' }, h('b', null, weekMin), h('span', null, 'דקות השבוע')),
       h('div', { class: 'stat' }, h('b', null, streak()), h('span', null, '🔥 ימים ברצף')),
@@ -4360,10 +4473,10 @@ function StageChat(res) {
   const ear = (text, cls = 'mini-ear') => h('button', { class: cls, type: 'button', 'aria-label': 'השמע', onclick: e => { e.stopPropagation(); Speech.en(text, .8); } }, '🔊');
   const app = screen('שיחות');
   const log = h('div', { class: 'chat-log' });
-  const meAv = me() ? me().avatar : '🙂';
+  const meAv = () => avatarEl();
   const npcBubble = (t, showHe) => h('div', { class: 'bub npc' }, h('span', { class: 'av' }, dlg.who),
     h('div', { class: 'tx' }, h('span', { class: 'en' }, t.say), ear(t.say), showHe ? h('small', null, heOf(t.he)) : null));
-  const myBubble = t => h('div', { class: 'bub mine' }, h('div', { class: 'tx' }, h('span', { class: 'en' }, fillName(t.ok)), ear(fillName(t.ok)), h('small', null, heOf(t.me).replace('{name}', kidNameHe()))), h('span', { class: 'av' }, meAv));
+  const myBubble = t => h('div', { class: 'bub mine' }, h('div', { class: 'tx' }, h('span', { class: 'en' }, fillName(t.ok)), ear(fillName(t.ok)), h('small', null, heOf(t.me).replace('{name}', kidNameHe()))), h('span', { class: 'av' }, meAv()));
   // the turns already played (after coming back to it) stay on the screen
   dlg.turns.slice(0, round).forEach(t => log.append(npcBubble(t, true), myBubble(t)));
   const dots = h('div');
@@ -4865,7 +4978,7 @@ function LeaderBoard(tab) {
   if (boardTab === 'all') return allBoard(app);
   app.append(
     h('div', { class: 'board' }, rows.map((r, i) => h('div', { class: 'board-row' + (r.id === PID ? ' me' : '') },
-      h('span', { class: 'rank' }, MEDAL[i] || `${i + 1}`), h('span', { class: 'av' }, r.avatar),
+      h('span', { class: 'rank' }, MEDAL[i] || `${i + 1}`), h('span', { class: 'av' }, avatarEl(r.id)),
       h('span', { class: 'nm' }, h('b', null, r.name), h('small', null, `תחנה ${r.at + 1}` + (r.fire ? ` · 🔥 ${r.fire} ימים` : ''))),
       h('span', { class: 'pts' }, `⭐ ${r.mstars}`)))),
     h('div', { class: 'row' }, h('button', { class: 'btn green wide', onclick: () => {
@@ -5039,7 +5152,7 @@ function MapScreen() {
       : `<circle r="21" fill="${dark ? '#56717D' : '#CFC8BB'}" stroke="${dark ? '#34505C' : '#958D80'}" stroke-width="4"/>`;
     const stars = kind === 'done' && s.kind !== 'learn' ? [-16, 0, 16].map((dx, k) => `<polygon transform="translate(${dx} ${k === 1 ? -35 : -31})" points="${STAR_PTS}" fill="${k < best ? '#FFD23F' : dark ? '#4A6470' : '#E2DACB'}" stroke="${k < best ? '#B9790F' : dark ? '#33505C' : '#B8AE9C'}" stroke-width="1.5"/>`).join('') : '';
     const flag = s.quiz ? `<text x="20" y="-16" font-size="17">🏁</text>` : '';
-    const meTag = kind === 'now' ? `<g class="mme"><path d="M-6-37L0-29L6-37Z" fill="#fff"/><circle cy="-54" r="19" fill="#fff" stroke="#FF8A3D" stroke-width="4"/><text y="-46" text-anchor="middle" font-size="22">${escSvg(kid ? kid.avatar : '⭐')}</text></g>` : '';
+    const meTag = kind === 'now' ? `<g class="mme"><path d="M-6-37L0-29L6-37Z" fill="#fff"/><circle cy="-63" r="27" fill="#fff" stroke="#FF8A3D" stroke-width="4"/>${kid ? `<clipPath id="mmeclip"><circle cy="-63" r="24"/></clipPath><image href="${avatarSrc(Look.get(), Shop.get().wear)}" x="-25" y="-88" width="50" height="50" clip-path="url(#mmeclip)"/>` : '<text y="-46" text-anchor="middle" font-size="22">⭐</text>'}</g>` : '';
     st[kind === "now" ? "unshift" : "push"](`<g class="ms ms-${kind}" data-i="${i}" role="button" tabindex="${kind === 'locked' ? -1 : 0}" aria-label="${escSvg(label)}" aria-disabled="${kind === 'locked'}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><ellipse cy="15" rx="24" ry="7" fill="rgba(0,0,0,.2)"/><circle r="34" fill="transparent"/><g class="mbody">${disc}${face}</g>${stars}${flag}${meTag}</g>`);
   }
   // fog over what is still far ahead: the path keeps going, there is always more
