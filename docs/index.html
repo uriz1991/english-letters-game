@@ -943,7 +943,7 @@ const Activity = {
     setInterval(() => this.tick(), this.STEP * 1000);
   },
   tick() {
-    if (!PID || document.hidden || Date.now() - this.last > 60000) return;
+    if (!PID || !learningNow || document.hidden || Date.now() - this.last > 60000) return;
     const k = dayKey();
     state.time[k] = (state.time[k] || 0) + this.STEP;
     // keep 90 days
@@ -958,7 +958,7 @@ const Activity = {
    It never shows less than the daily time saved in the account (time played on another phone counts too).
    It runs only while the game is on screen and someone touched it in the last minute (like the daily time). */
 const Clock = {
-  active() { return !document.hidden && Date.now() - Activity.last <= 60000; },
+  active() { return learningNow && !document.hidden && Date.now() - Activity.last <= 60000; },
   sec() {
     if (!PID) return 0;
     const c = RAW.get(`p${PID}_clk`, null);
@@ -1414,7 +1414,13 @@ function showTimeUp(first) {
    Router / screen frame
    ========================================================= */
 let cleanup = null;
+/* Learning time counts only on screens where the child really learns or practises (lessons, stations, stages),
+   never on the menus, the map, settings, the shop, the parents area or the result screens. */
+const NOT_LEARNING = new Set(['אותיות באנגלית', 'המפה', 'חזרה ושינון', 'כותבים', 'ההגדרות שלי', 'האזור שלי', 'הדמות שלי', 'החנות',
+  'טבלת האלופים', 'איך משחקים', 'אזור ההורים', 'דוח להורים', 'מי משחק?', 'עריכת ילדים', 'עריכת פרופיל', 'ילד חדש', 'כל הכבוד!', 'עברת!', 'עוד קצת', 'תיבת הפתעה']);
+let learningNow = false;
 function screen(title, showBack = true) {
+  learningNow = !NOT_LEARNING.has(title);
   if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
   if (Speech.ok) try { speechSynthesis.cancel(); } catch (e) {}
   Mic.release();
@@ -1542,13 +1548,28 @@ function Intro(then) {
   show();
 }
 // the child's home: almost empty. The map first, everything else one tap away.
+// the moment the shop opens: a big message, once per child
+function shopOpened(m = mapState()) {
+  if (!Shop.open(m) || store.get('shopToast', false) || store.get('shopSeen', false)) return;
+  store.set('shopToast', true);
+  setTimeout(() => {
+    const md = $('#modal'); if (!md.hidden) return;
+    const big = h('span', { class: 'sticker' }, '🛍️'), close = () => { md.hidden = true; md.replaceChildren(); };
+    md.replaceChildren(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' }, big,
+      h('div', { class: 'prompt' }, '🎉 החנות נפתחה סוף סוף!'),
+      h('p', { class: 'sub' }, `יש לך ${Shop.coins()} מטבעות 🪙. ${g('קנה', 'קני')} בגדים, כובעים ומשקפיים לדמות שלך. כל כוכב שמרוויחים נותן עוד מטבע.`),
+      h('div', { class: 'row' }, h('button', { class: 'btn green', onclick: () => { close(); ShopScreen(); } }, '🛍️ לחנות'),
+        h('button', { class: 'btn secondary', onclick: close }, 'אחר כך'))));
+    md.hidden = false; pop(big); burst(big, 22);
+  }, 700);
+}
 function shopTile(mm) {
   if (!SHOP_ON) return null;
   const open = Shop.open(mm);
   return h('button', { class: 'home-tile' + (open ? '' : ' locked'), onclick: () => ShopScreen() },
     open && !store.get('shopSeen', false) ? h('span', { class: 'new' }, 'חדש!') : null,
     h('span', { class: 'ic' }, '🛍️'), h('b', null, 'החנות'),
-    h('small', null, open ? `🪙 ${Shop.coins()} מטבעות` : '🔒 נפתחת בתחנה 20'));
+    h('small', null, open ? `🪙 ${Shop.coins()} מטבעות` : `🔒 נפתחת בתחנה ${SHOP_ST}`));
 }
 function resumeButton() {
   const r = Resume.get();
@@ -1599,6 +1620,7 @@ function Home() {
       h('button', { class: 'link-btn', onclick: () => ProfilePicker() }, '👥 החלפת שחקן 🔒'),
       h('button', { class: 'link-btn', onclick: () => ParentArea() }, '👪 להורים 🔒'))));
   enter(mapBtn);
+  shopOpened(mm);
 }
 /* What opens in "review and practice": a stage opens once the child passed a map station of that kind,
    and a level opens once the child passed a practice station of that level. Learn first on the map, then practise here. */
@@ -1662,7 +1684,8 @@ function Practice() {
    "shop" = { spent, owned: [item ids], wear: { top, head, glasses, bg } }.
    ========================================================= */
 const SHOP_ON = true;
-const SHOP_AT = 19;   // the shop opens at map station 20 (0-based)
+const SHOP_AT = 4;   // the shop opens at map station 5 (0-based)
+const SHOP_ST = SHOP_AT + 1;
 const SKINS = { light: '#F4C9A8', medium: '#E3A880', tan: '#C68A5E', dark: '#7E5236' };
 const HAIRS = { brown: '#6E4428', dark: '#3A2A22', black: '#231C1A', ginger: '#D2643A', blond: '#D9A84E' };
 const HAIR_STYLES = { m: ['short', 'side', 'curly'], f: ['long', 'bob', 'bun', 'curly'] };
@@ -1812,7 +1835,7 @@ function ShopScreen(tab) {
   if (!Shop.open(m)) {
     const left = SHOP_AT - m.at;
     app.append(h('div', { class: 'end shop-lock' }, h('div', { class: 'big' }, '🛍️'),
-      h('h2', null, '🔒 החנות נפתחת בתחנה 20'),
+      h('h2', null, `🔒 החנות נפתחת בתחנה ${SHOP_ST}`),
       h('div', { class: 'shop-bar' }, h('i', { style: `width:${Math.round(Math.max(0, m.at) / SHOP_AT * 100)}%` })),
       h('p', { class: 'sub' }, left === 1 ? 'עוד תחנה אחת במפה!' : `עוד ${left} תחנות במפה.`),
       h('p', { class: 'sub' }, 'בחנות קונים בגדים, כובעים, משקפיים ורקעים לדמות שלך, במטבעות 🪙 שמרוויחים על כל כוכב.'),
@@ -1891,7 +1914,7 @@ function KidSettings() {
   const draw = () => {
     now.textContent = fmtClock(Clock.sec());
     today.textContent = Clock.sec() >= state.goal * 60 ? `🎯 הגעת ליעד של היום (${state.goal} דקות)!` : `🎯 היעד של היום: ${state.goal} דקות`;
-    pause.textContent = Clock.active() ? '' : `⏸️ השעון עוצר כשלא נוגעים במסך. ${g('גע', 'געי')} כדי להמשיך.`;
+    pause.textContent = '⏸️ השעון סופר רק בזמן לימוד ותרגול, לא בהגדרות, בחנות או במפה.';
     if (state.timerMin) left.textContent = fmtClock(Math.max(0, PlayTimer.left()));
     PlayTimer.render(); Clock.render();
   };
@@ -1909,7 +1932,7 @@ function KidSettings() {
       h('div', { class: 'stat' }, h('b', null, mapStars(mm)), h('span', null, '🗺️ במפה')),
       h('div', { class: 'stat' }, h('b', null, state.stickers.length), h('span', null, '🏷️ מדבקות'))),
     h('p', { class: 'ks-note' }, `🗺️ ${g('אתה', 'את')} בתחנה ${mm.at + 1}: ${stationTitle(stationAt(mm.at))}`),
-    SHOP_ON ? h('p', { class: 'ks-note' }, Shop.open(mm) ? `🪙 ${Shop.coins()} מטבעות לחנות` : '🛍️ החנות נפתחת בתחנה 20') : null);
+    SHOP_ON ? h('p', { class: 'ks-note' }, Shop.open(mm) ? `🪙 ${Shop.coins()} מטבעות לחנות` : `🛍️ החנות נפתחת בתחנה ${SHOP_ST}`) : null);
   // "my area" sits right under the child's name
   app.append(...[h('div', { class: 'me-head' }, h('div', { class: 'av' }, avatarEl()), h('h1', null, p.name),
     h('button', { class: 'btn secondary small', style: 'margin-top:6px', onclick: () => MyArea() }, '📒 האזור שלי')),
@@ -2226,7 +2249,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = '64690a01', APP_BUILT = '17.11.2026 14:16';
+const APP_VERSION = '29dd65e3', APP_BUILT = '17.11.2026 14:33';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -2790,7 +2813,7 @@ function ProfileForm(id, back) {
     const ok = canPick(a);
     const b = h('button', { type: 'button', class: (a === avatar ? 'on' : '') + (ok ? '' : ' locked'), 'aria-label': ok ? a : a + ' נעול, קונים בחנות' }, a);
     b.addEventListener('click', () => {
-      if (!ok) { toast('🔒 את הדמות הזו קונים בחנות, במטבעות. החנות נפתחת בתחנה 20.'); shake(b); return; }
+      if (!ok) { toast('🔒 את הדמות הזו קונים בחנות, במטבעות.'); shake(b); return; }
       avatar = a; [...avGrid.children].forEach(x => x.classList.toggle('on', x === b)); pop(b);
     });
     return b;
@@ -5081,7 +5104,7 @@ function MapScreen() {
   const m = mapState(), at = m.at, kid = me();
   Lock.open = false;
   const app = screen('המפה'); menu = 'home';
-  if (Shop.open(m) && !store.get('shopSeen', false) && !store.get('shopToast', false)) { store.set('shopToast', true); setTimeout(() => toast('🛍️ החנות נפתחה! קונים בה דמויות ובגדים במטבעות. היא במסך הבית.', 6000), 600); }
+  shopOpened(m);
   app.append(h('div', { class: 'map-head' }, h('b', null, `⭐ ${mapStars(m)} כוכבים במפה`),
     h('button', { class: 'btn small', onclick: () => LeaderBoard() }, '🏆 טבלה'), h('span', null, `תחנה ${at + 1}`)));
 
