@@ -1909,9 +1909,10 @@ function KidSettings() {
       h('div', { class: 'stat' }, h('b', null, mapStars(mm)), h('span', null, '🗺️ במפה')),
       h('div', { class: 'stat' }, h('b', null, state.stickers.length), h('span', null, '🏷️ מדבקות'))),
     h('p', { class: 'ks-note' }, `🗺️ ${g('אתה', 'את')} בתחנה ${mm.at + 1}: ${stationTitle(stationAt(mm.at))}`),
-    SHOP_ON ? h('p', { class: 'ks-note' }, Shop.open(mm) ? `🪙 ${Shop.coins()} מטבעות לחנות` : '🛍️ החנות נפתחת בתחנה 20') : null,
-    h('div', { class: 'row' }, h('button', { class: 'btn secondary small', onclick: () => MyArea() }, '📒 האזור שלי')));
-  app.append(...[h('div', { class: 'me-head' }, h('div', { class: 'av' }, avatarEl()), h('h1', null, p.name)),
+    SHOP_ON ? h('p', { class: 'ks-note' }, Shop.open(mm) ? `🪙 ${Shop.coins()} מטבעות לחנות` : '🛍️ החנות נפתחת בתחנה 20') : null);
+  // "my area" sits right under the child's name
+  app.append(...[h('div', { class: 'me-head' }, h('div', { class: 'av' }, avatarEl()), h('h1', null, p.name),
+    h('button', { class: 'btn secondary small', style: 'margin-top:6px', onclick: () => MyArea() }, '📒 האזור שלי')),
     clock, parent, points, voiceSettings()].filter(Boolean));
   enter(clock);
 }
@@ -2225,7 +2226,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = '06e0f6c0', APP_BUILT = '17.11.2026 13:32';
+const APP_VERSION = '64690a01', APP_BUILT = '17.11.2026 14:16';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
