@@ -113,6 +113,7 @@ header.top{gap:6px;padding-left:12px;padding-right:12px}
 .bd-kid:last-child{border-bottom:0}
 .bd-kid .av{font-size:28px}.bd-kid .nm{flex:1;min-width:150px;font-weight:700}.bd-kid .nm small{display:block;font-weight:400;color:var(--muted);font-size:13px}
 .bd-kid .acts{display:flex;gap:6px}
+.bd-kid .nm small.bd-score{color:var(--ink);font-weight:700;font-size:14px}.bd-kid .nm small.bd-score b{color:#e09412}
 .kids-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .kid-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line,#eee4d4)}
 .kid-row:last-child{border-bottom:0}
@@ -1825,6 +1826,9 @@ function kidReport(id) {
 function boardBox() {
   const box = h('div', { class: 'card', id: 'boardBox', style: 'margin:12px 0' });
   let msg = '', busy = false;
+  const ranks = {};
+  // the place of every child on the board (one small count per child)
+  const loadRanks = async () => { for (const id of Object.keys(Board.map())) { try { ranks[id] = await Board.rank(id); } catch (e) {} } };
   const say = e => {
     const k = Board.err(e);
     msg = k === 'off' ? '⚠️ הטבלה של כל השחקנים עוד לא הופעלה בשרת.' : k === 'offline' ? '📡 צריך אינטרנט כדי לשנות את הטבלה.' : '⚠️ משהו לא הצליח. נסו שוב בעוד רגע.';
@@ -1840,22 +1844,25 @@ function boardBox() {
       h('p', { style: 'margin:6px 0;font-size:14px' }, 'ילד שמצרפים מופיע בטבלה של כל השחקנים באתר, בכינוי משחק אוטומטי כמו "אריה כחול 27". בטבלה יש רק את הכינוי, הדמות, מספר התחנה והכוכבים במפה. אין בה שם, תמונה או שום פרט אחר. כבוי כברירת מחדל.')];
     if (!Cloud.possible() || !Sync.on()) kids.push(h('p', { style: 'margin:6px 0' }, 'בקובץ ששולחים בוואטסאפ אין טבלה של כל השחקנים. היא נמצאת רק באתר, אחרי כניסה של ההורה.'));
     else {
-      const map = Board.map();
+      const map = Board.map(), score = {};
+      for (const r of kidBoard()) score[r.id] = r;
       kids.push(h('div', null, Profiles.list().map(p => {
-        const e = map[p.id];
+        const e = map[p.id], sc = score[p.id] || { at: 0, mstars: 0 };
         return h('div', { class: 'bd-kid' }, h('span', { class: 'av' }, p.avatar),
-          h('span', { class: 'nm' }, p.name, h('small', null, e ? `✅ בטבלה בתור "${nickName(e.a, e.b, e.n)}"` : 'לא בטבלה')),
+          h('span', { class: 'nm' }, p.name,
+            h('small', { class: 'bd-score' }, `🗺️ תחנה ${sc.at + 1} · ⭐ ${sc.mstars} כוכבים`, e && ranks[p.id] ? h('b', null, ` · 🏆 מקום ${ranks[p.id]}`) : null),
+            h('small', null, e ? `✅ בטבלה בתור "${nickName(e.a, e.b, e.n)}"` : 'לא בטבלה')),
           h('span', { class: 'acts' }, e
             ? [h('button', { class: 'btn secondary small', disabled: busy, 'aria-label': 'כינוי אחר', onclick: () => act(() => Board.rename(p.id)) }, '🎲 כינוי אחר'),
                h('button', { class: 'btn secondary small', disabled: busy, onclick: () => act(() => Board.leave(p.id)) }, 'להוציא')]
-            : h('button', { class: 'btn small', disabled: busy, onclick: () => act(() => Board.join(p.id)) }, '➕ לצרף')));
+            : h('button', { class: 'btn small', disabled: busy, onclick: () => act(async () => { await Board.join(p.id); await loadRanks(); }) }, '➕ לצרף')));
       })));
     }
     if (msg) kids.push(h('p', { class: 'sync-st', role: 'status', style: 'margin:8px 0 0' }, msg));
     box.replaceChildren(...kids);
   }
   draw();
-  if (Cloud.possible() && Sync.on() && navigator.onLine) act(() => Board.refresh());
+  if (Cloud.possible() && Sync.on() && navigator.onLine) act(async () => { await Board.refresh(); await loadRanks(); });
   return box;
 }
 /* The parents area (behind the code): every child at a glance, then the settings */
@@ -1933,7 +1940,7 @@ function timerSettings() {
 /* Version update. The build writes the version into the game and into version.json on the site.
    "Check" asks the site for version.json; "update" clears the offline copy and loads the new one.
    Progress lives in localStorage, so updating never touches it. */
-const APP_VERSION = '8e3934a3', APP_BUILT = '17.11.2026 10:15';
+const APP_VERSION = 'c18496d5', APP_BUILT = '17.11.2026 11:42';
 const SITE = 'https://uriz1991.github.io/english-letters-game/';
 function updateBox() {
   const fromFile = location.protocol === 'file:';
@@ -2233,7 +2240,7 @@ const randId = n => {
   return [...r].map(x => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join('');
 };
 const Board = {
-  cache: null, rankCache: null,
+  cache: null, rankCache: {},
   map() { return RAW.get('bmap', {}); },   // child id -> { bid, a, b, n }: this phone's copy of what the account says
   err(e) { return e && /\b403\b/.test(e.message) ? 'off' : navigator.onLine ? 'error' : 'offline'; },
   newNick(g) {
@@ -2334,13 +2341,14 @@ const Board = {
   async rank(id) {
     const e = this.map()[id]; if (!e || e.a == null) return null;
     const sc = this.fields(id, e).sc;
-    if (this.rankCache && this.rankCache.sc === sc && Date.now() - this.rankCache.t < 180000) return this.rankCache.n;
+    const rc = this.rankCache[id];
+    if (rc && rc.sc === sc && Date.now() - rc.t < 180000) return rc.n;
     const out = await Sync.api('POST', ':runAggregationQuery', { structuredAggregationQuery: {
       structuredQuery: { from: [{ collectionId: 'board' }], where: { fieldFilter: { field: { fieldPath: 'sc' }, op: 'GREATER_THAN', value: { integerValue: String(sc) } } } },
       aggregations: [{ alias: 'n', count: {} }] } });
     const r = (out || []).find(x => x.result);
     const n = 1 + Number((r && r.result.aggregateFields && r.result.aggregateFields.n && r.result.aggregateFields.n.integerValue) || 0);
-    this.rankCache = { sc, n, t: Date.now() };
+    this.rankCache[id] = { sc, n, t: Date.now() };
     return n;
   },
 };
