@@ -835,15 +835,19 @@ const knownABC = () => { if (Run) return Run.known; const L = learnedABC(); retu
 const findLetter = L => LETTERS.find(x => x.L === L.toUpperCase());
 const levelWords = d => {
   if (Run) return fitWords(Run).filter(w => d == null || w.d === d);
-  // the words of this level made of learned letters; only if there are too few, easier words fill in
-  const ws = fitWords({ known: knownABC() }).filter(w => d == null || w.d === d), exact = ws.filter(w => w.L === state.level);
+  // the words of this level made of learned letters; only if there are too few, easier words fill in.
+  // While the child is still in the letters phase of the map, practice uses the same short regular words as the map.
+  const inLetters = !MAP.some(s => s.phase > 1 && s.id in mapState().pass);
+  const ws = fitWords({ known: knownABC(), ...(inLetters ? { maxLen: 3, cvc: true } : {}) }).filter(w => d == null || w.d === d), exact = ws.filter(w => w.L === state.level);
   return exact.length >= 6 ? exact : ws.filter(w => w.L <= state.level);
 };
 const findWord = s => WORDS.find(w => w.w === s && w.L === state.level) || WORDS.find(w => w.w === s);
 // words made only of letters the child already met on the map (+ only one word level, if the station says so)
+// a regular short word: consonant, one vowel, consonant (bag, bed, dog). Read letter by letter, like Hebrew with niqqud.
+const CVC = /^[b-df-hj-np-tvwyz][aeiou][b-df-hj-npqstvz]$/i;   // no r at the end: car, far are not read letter by letter
 function fitWords(st) {
   const set = new Set(st.known.map(x => x.toLowerCase())), seen = new Set();
-  return WORDS.filter(w => (!st.wl || w.L === st.wl) && [...w.w.toLowerCase()].every(c => !/[a-z]/.test(c) || set.has(c))
+  return WORDS.filter(w => (!st.wl || w.L === st.wl) && (!st.maxLen || w.w.length <= st.maxLen) && (!st.cvc || CVC.test(w.w)) && [...w.w.toLowerCase()].every(c => !/[a-z]/.test(c) || set.has(c))
     && !seen.has(w.w) && seen.add(w.w));
 }
 function runWords(n) {
@@ -1408,7 +1412,9 @@ let cleanup = null;
 const NOT_LEARNING = new Set(['אותיות באנגלית', 'המפה', 'חזרה ושינון', 'כותבים', 'ההגדרות שלי', 'האזור שלי', 'הדמות שלי', 'החנות',
   'טבלת האלופים', 'איך משחקים', 'אזור ההורים', 'דוח להורים', 'מי משחק?', 'עריכת ילדים', 'עריכת פרופיל', 'ילד חדש', 'כל הכבוד!', 'עברת!', 'עוד קצת', 'תיבת הפתעה']);
 let learningNow = false;
+let screenSeq = 0;   // goes up on every new screen (lets a delayed message know the child moved on)
 function screen(title, showBack = true) {
+  screenSeq++;
   learningNow = !NOT_LEARNING.has(title);
   if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
   if (Speech.ok) try { speechSynthesis.cancel(); } catch (e) {}
@@ -1541,8 +1547,11 @@ function Intro(then) {
 function shopOpened(m = mapState()) {
   if (!Shop.open(m) || store.get('shopToast', false) || store.get('shopSeen', false)) return;
   store.set('shopToast', true);
+  const seq = screenSeq;   // the screen that asked for the message
   setTimeout(() => {
-    const md = $('#modal'); if (!md.hidden) return;
+    const md = $('#modal');
+    // the child already moved to another screen (or a dialog is open): don't cover it, show it next time instead
+    if (!md.hidden || screenSeq !== seq) { store.set('shopToast', false); return; }
     const big = h('span', { class: 'sticker' }, '🛍️'), close = () => { md.hidden = true; md.replaceChildren(); };
     md.replaceChildren(h('div', { class: 'card', role: 'dialog', 'aria-modal': 'true' }, big,
       h('div', { class: 'prompt' }, '🎉 החנות נפתחה סוף סוף!'),
@@ -3161,7 +3170,9 @@ function MirrorChallenge(earnedBefore = 0, res) {
   let items, round = 0, earned = earnedBefore;
   if (res && res.items) { items = res.items; round = res.round; earned = res.earned; }
   else {
-    const pools = Object.fromEntries(set.map(L => [L, shuffle(MIRROR_WORDS[L].map((_, i) => i))]));
+    // short words only (bed, dog, pen), like the rest of the letters phase; q has none, so its shortest words are used
+    const short = L => { const ix = MIRROR_WORDS[L].map((_, i) => i), s = ix.filter(i => MIRROR_WORDS[L][i].w.length <= 4); return s.length >= 2 ? s : ix.sort((a, b) => MIRROR_WORDS[L][a].w.length - MIRROR_WORDS[L][b].w.length).slice(0, 2); };
+    const pools = Object.fromEntries(set.map(L => [L, shuffle(short(L))]));
     items = shuffle(Array.from({ length: ROUNDS }, (_, i) => { const L = set[i % set.length]; const p = pools[L]; return [L, p[Math.floor(i / set.length) % p.length]]; }));
   }
 
@@ -4704,7 +4715,8 @@ const MAP_BUILT = (() => {
       const lv = ALL_ABC.filter(L => findLetter(L).lvl === level);
       add({ ...base, kind: 'listen', letters: lv, rounds: 10, pct: .9, quiz: true, tag: `${lv[0]}–${lv[lv.length - 1]}` });
       // map v5: now the letters make words. First a lesson (letters -> word), then building, missing letter, reading
-      const wb = { ...base, v: 5, letters: [], key: 'lw' + level, tag: 'מילים' };
+      // maxLen 3 + cvc: the child only just learned the letters, so the first words are short and regular (bag, bed, cab), never 6 letters
+      const wb = { ...base, v: 5, letters: [], key: 'lw' + level, tag: 'מילים', maxLen: 3, cvc: true };
       add({ ...wb, kind: 'learn', words: true, title: 'לומדים: מאותיות למילה' });
       add({ ...wb, kind: 'build' });
       add({ ...wb, kind: 'missing' });
